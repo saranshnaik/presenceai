@@ -15,102 +15,146 @@ import com.nophubbing.presenceai.services.UsageEventsCollector
 import com.nophubbing.presenceai.analytics.FeatureExtractor
 import com.nophubbing.presenceai.services.MonitoringService
 
-class MainActivity : AppCompatActivity() {
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.nophubbing.presenceai.ui.screens.PermissionScreen
+import com.nophubbing.presenceai.ui.screens.DashboardScreen
+import com.nophubbing.presenceai.ui.theme.PresenceAITheme
+import com.nophubbing.presenceai.utils.OnboardingManager
 
-    private lateinit var statusText: TextView
-    private lateinit var usageButton: Button
-    private lateinit var micButton: Button
-    private lateinit var bluetoothButton: Button
-    private lateinit var usageEventsCollector: UsageEventsCollector
-    private lateinit var featureExtractor: FeatureExtractor
-
-    private lateinit var usageCollector: UsageStatsCollector
-
-    private val micPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-
-    private val bluetoothPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val serviceIntent = Intent(this, MonitoringService::class.java)
-        startForegroundService(serviceIntent)
         super.onCreate(savedInstanceState)
 
-        usageCollector = UsageStatsCollector(this)
+        val onboardingDone =
+            OnboardingManager.isOnboardingComplete(this)
 
-        val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.setPadding(50,200,50,50)
+        setContent {
 
-        statusText = TextView(this)
-        statusText.textSize = 20f
+            PresenceAITheme {
 
-        usageButton = Button(this)
-        micButton = Button(this)
-        bluetoothButton = Button(this)
+                var started by remember { mutableStateOf(onboardingDone) }
 
-        usageButton.text = "Grant Usage Access"
-        micButton.text = "Enable Microphone (Optional)"
-        bluetoothButton.text = "Enable Bluetooth (Optional)"
+                if (!started) {
 
-        layout.addView(statusText)
-        layout.addView(usageButton)
-        layout.addView(micButton)
-        layout.addView(bluetoothButton)
+                    PermissionScreen {
 
-        setContentView(layout)
+                        OnboardingManager.setOnboardingComplete(this)
 
-        usageButton.setOnClickListener {
+                        started = true
+                    }
 
-            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-            startActivity(intent)
+                } else {
 
+                    DashboardScreen()
+
+                }
+            }
         }
-
-        micButton.setOnClickListener {
-
-            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-
-        }
-
-        bluetoothButton.setOnClickListener {
-
-            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-
-        }
-
-        updateUI()
-        usageEventsCollector = UsageEventsCollector(this)
-        featureExtractor = FeatureExtractor(this)
-
-    }
-
-    override fun onResume() {
-        super.onResume()
-
-        updateUI()
-
-        if (PermissionManager.hasUsageStatsPermission(this)) {
-
-            usageCollector.printUsageStats()
-
-            usageEventsCollector.printRecentForegroundEvents()
-
-            featureExtractor.extractFeatures()
-        }
-    }
-
-    private fun updateUI() {
-
-        val usage = PermissionManager.hasUsageStatsPermission(this)
-        val mic = PermissionManager.hasMicPermission(this)
-        val bt = PermissionManager.hasBluetoothPermission(this)
-
-        statusText.text =
-            "Permissions Status\n\n" +
-                    "Usage Access: $usage\n" +
-                    "Microphone: $mic\n" +
-                    "Bluetooth: $bt"
     }
 }
+
+//class MainActivity : AppCompatActivity() {
+//
+//    private lateinit var statusText: TextView
+//    private lateinit var usageButton: Button
+//    private lateinit var micButton: Button
+//    private lateinit var bluetoothButton: Button
+//    private lateinit var usageEventsCollector: UsageEventsCollector
+//    private lateinit var featureExtractor: FeatureExtractor
+//
+//    private lateinit var usageCollector: UsageStatsCollector
+//
+//    private val micPermissionLauncher =
+//        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+//
+//    private val bluetoothPermissionLauncher =
+//        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+//
+//    override fun onCreate(savedInstanceState: Bundle?) {
+//        val serviceIntent = Intent(this, MonitoringService::class.java)
+//        startForegroundService(serviceIntent)
+//        super.onCreate(savedInstanceState)
+//
+//        usageCollector = UsageStatsCollector(this)
+//
+//        val layout = LinearLayout(this)
+//        layout.orientation = LinearLayout.VERTICAL
+//        layout.setPadding(50,200,50,50)
+//
+//        statusText = TextView(this)
+//        statusText.textSize = 20f
+//
+//        usageButton = Button(this)
+//        micButton = Button(this)
+//        bluetoothButton = Button(this)
+//
+//        usageButton.text = "Grant Usage Access"
+//        micButton.text = "Enable Microphone (Optional)"
+//        bluetoothButton.text = "Enable Bluetooth (Optional)"
+//
+//        layout.addView(statusText)
+//        layout.addView(usageButton)
+//        layout.addView(micButton)
+//        layout.addView(bluetoothButton)
+//
+//        setContentView(layout)
+//
+//        usageButton.setOnClickListener {
+//
+//            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+//            startActivity(intent)
+//
+//        }
+//
+//        micButton.setOnClickListener {
+//
+//            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+//
+//        }
+//
+//        bluetoothButton.setOnClickListener {
+//
+//            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+//
+//        }
+//
+//        updateUI()
+//        usageEventsCollector = UsageEventsCollector(this)
+//        featureExtractor = FeatureExtractor(this)
+//
+//    }
+//
+//    override fun onResume() {
+//        super.onResume()
+//
+//        updateUI()
+//
+//        if (PermissionManager.hasUsageStatsPermission(this)) {
+//
+//            usageCollector.printUsageStats()
+//
+//            usageEventsCollector.printRecentForegroundEvents()
+//
+//            featureExtractor.extractFeatures()
+//        }
+//    }
+//
+//    private fun updateUI() {
+//
+//        val usage = PermissionManager.hasUsageStatsPermission(this)
+//        val mic = PermissionManager.hasMicPermission(this)
+//        val bt = PermissionManager.hasBluetoothPermission(this)
+//
+//        statusText.text =
+//            "Permissions Status\n\n" +
+//                    "Usage Access: $usage\n" +
+//                    "Microphone: $mic\n" +
+//                    "Bluetooth: $bt"
+//    }
+//}

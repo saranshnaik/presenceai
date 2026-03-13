@@ -5,9 +5,12 @@
     <!-- Optional permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions"/>
@@ -17,7 +20,7 @@
     <application
         android:allowBackup="true"
         android:label="PresenceAI"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@style/Theme.PresenceAI">
 
         <activity
             android:name=".MainActivity"
@@ -54,7 +57,12 @@
         <service
             android:name=".services.MonitoringService"
             android:exported="false"
-            android:foregroundServiceType="dataSync"/>
+            android:foregroundServiceType="microphone|dataSync"/>
+
+<!--        <service-->
+<!--            android:name=".services.MonitoringService"-->
+<!--            android:foregroundServiceType="microphone|dataSync"-->
+<!--            android:exported="false" />-->
 
     </application>
 

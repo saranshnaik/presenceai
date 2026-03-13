@@ -37,6 +37,9 @@ android {
     buildFeatures {
         compose = true
     }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.15"
+    }
 }
 
 dependencies {
@@ -58,4 +61,9 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("androidx.compose.ui:ui:1.10.5")
+    implementation("androidx.compose.material3:material3:1.4.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.navigation:navigation-compose:2.9.7")
+    implementation("com.google.android.material:material:1.12.0")
 }

@@ -11,13 +11,15 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.nophubbing.presenceai.analytics.FeatureExtractor
 import com.nophubbing.presenceai.analytics.SignalAggregator
+import com.nophubbing.presenceai.analytics.SignalRepository
 import com.nophubbing.presenceai.storage.CSVLogger
 import com.nophubbing.presenceai.utils.PermissionManager
 
 class MonitoringService : Service() {
 
-    private val handler = Handler(Looper.getMainLooper())
+//    private val handler = Handler(Looper.getMainLooper())
     private val voiceMonitor = VoiceMonitor()
+    private val proximityMonitor by lazy { ProximityMonitor(this) }
 
     private lateinit var featureExtractor: FeatureExtractor
     private lateinit var signalAggregator: SignalAggregator
@@ -25,24 +27,18 @@ class MonitoringService : Service() {
 
     private val interval: Long = 60 * 1000   // 1 minute
 
-    private val monitorTask = object : Runnable {
+    private var running = true
 
-        override fun run() {
-
-            collectAndSaveSignals()
-
-            handler.postDelayed(this, interval)
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
+        startForegroundServiceNotification()
+        MonitoringState.isRunning = true
 
         featureExtractor = FeatureExtractor(this)
         signalAggregator = SignalAggregator(this)
         csvLogger = CSVLogger(this)
 
-        startForegroundServiceNotification()
 
 //        handler.post(monitorTask)
     }
@@ -59,6 +55,9 @@ class MonitoringService : Service() {
         val voiceDetected =
             if (micAllowed) voiceMonitor.detectVoice()
             else -1
+        val proximityDetected =
+            if (bluetoothAllowed) proximityMonitor.detectProximity()
+            else -1
 
         val signals = signalAggregator.generateSignals(
             unlocks = unlocks,
@@ -66,10 +65,11 @@ class MonitoringService : Service() {
             notificationReflex = features.notificationReflex,
             behaviorDrift = 0f,
             voiceDetected = voiceDetected,
+            proximityDetected = proximityDetected,
             micAllowed = micAllowed,
             bluetoothAllowed = bluetoothAllowed
         )
-
+        SignalRepository.update(signals)
 
         csvLogger.logSignals(signals)
 
@@ -79,7 +79,20 @@ class MonitoringService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
-        handler.post(monitorTask)
+        Thread {
+
+            while (running) {
+
+                try {
+                    collectAndSaveSignals()
+                    Thread.sleep(interval)
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+        }.start()
 
         return START_STICKY
     }
@@ -111,5 +124,10 @@ class MonitoringService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
+    }
+    override fun onDestroy() {
+        MonitoringState.isRunning = false
+        running = false
+        super.onDestroy()
     }
 }

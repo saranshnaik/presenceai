@@ -22,6 +22,7 @@ class SignalAggregator(private val context: Context) {
         notificationReflex: Int,
         behaviorDrift: Float,
         voiceDetected: Int,
+        proximityDetected: Int,
         micAllowed: Boolean,
         bluetoothAllowed: Boolean
     ): BehaviorSignals {
@@ -31,7 +32,7 @@ class SignalAggregator(private val context: Context) {
         val timePhase = computeTimePhase()
 
         val voice = if (micAllowed) voiceDetected else -1
-        val proximity = if (bluetoothAllowed) 0 else -1
+        val proximity = if (bluetoothAllowed) proximityDetected else -1
 
         return BehaviorSignals(
             timestamp,
