@@ -1,9 +1,5 @@
 package com.nophubbing.presenceai.ml
 
-/**
- * FeatureEngineering.kt — maps a SignalRow to a 14-element FeatureVector.
- * Updated to increase sensitivity for high-frequency behavioral signals.
- */
 object FeatureEngineering {
 
     fun buildFeatureVector(row: SignalRow): FeatureVector {

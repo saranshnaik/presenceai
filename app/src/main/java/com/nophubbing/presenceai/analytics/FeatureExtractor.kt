@@ -4,6 +4,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.util.Log
+import java.util.Calendar
 
 /**
  * FeatureExtractor.kt — reads real device signals from UsageStatsManager.

@@ -1,8 +1,5 @@
 package com.nophubbing.presenceai.analytics
 
-import android.content.Context
-import java.util.Calendar
-
 /**
  * SignalAggregator.kt — maps FeatureExtractor.FeatureMetrics → BehaviorSignals.
  * Produces ALL fields needed by both the 14-feature ML pipeline and the UI.

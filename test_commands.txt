@@ -1,0 +1,3 @@
+.\gradlew :app:testDebugUnitTest --tests "com.nophubbing.presenceai.genai.*" --info --rerun-tasks
+
+.\gradlew :app:testDebugUnitTest --tests "com.nophubbing.presenceai.rl.*" --info --rerun-tasks

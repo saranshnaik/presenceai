@@ -16,11 +16,10 @@
 
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions"/>
-
-
 
     <application
         android:allowBackup="true"
@@ -32,22 +31,26 @@
             android:exported="true">
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
         </activity>
 
+        <!-- Unlock detection receiver -->
         <receiver
             android:name=".services.UnlockReceiver"
             android:exported="true">
 
             <intent-filter>
+                <action android:name="android.intent.action.SCREEN_ON"/>
+                <action android:name="android.intent.action.SCREEN_OFF"/>
                 <action android:name="android.intent.action.USER_PRESENT"/>
             </intent-filter>
 
         </receiver>
 
+        <!-- Notification listener -->
         <service
             android:name=".services.NotificationListener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
@@ -59,10 +62,16 @@
 
         </service>
 
+        <!-- Monitoring foreground service -->
         <service
             android:name=".services.MonitoringService"
             android:exported="false"
-            android:foregroundServiceType="microphone|dataSync|connectedDevice"/>
+            android:foregroundServiceType="microphone|dataSync"/>
+
+<!--        <service-->
+<!--            android:name=".services.MonitoringService"-->
+<!--            android:foregroundServiceType="microphone|dataSync"-->
+<!--            android:exported="false" />-->
 
     </application>
 
