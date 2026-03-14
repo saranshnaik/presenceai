@@ -34,8 +34,11 @@ class SignalAggregator(private val context: Context) {
             notifReflexRatio        = features.notifReflexRatio,
             behaviorDriftScore      = driftScore,
             timePhaseRisk           = features.timePhase,
-            voiceActivityDetected   = features.vadEnergy.toInt(),
+            // VAD: binary gate uses threshold 0.25 so a clear voice registers as 1
+            voiceActivityDetected   = if (features.vadEnergy > 0.25f) 1 else 0,
+            // BLE: nearby = any positive score (0.5 anonymous, 0.9 paired device)
             peopleNearbyCount       = if (features.bleSocial > 0f) 1 else 0,
+            // Pass through the raw confidence scores for the ML feature vector
             vadConfidenceScore      = features.vadEnergy,
             btSignalStrength        = features.bleSocial,
 
@@ -44,7 +47,7 @@ class SignalAggregator(private val context: Context) {
             notifToUnlockGapS       = features.avgNotifToUnlockGapS,
 
             // UI display counts
-            unlocks                 = features.unlockCountPerHour.toInt(),
+            unlocks                 = features.rawUnlockCount,
             totalSessions           = features.totalSessions,
             microSessions           = features.microSessionCount,
             notificationReflexCount = features.notifReflexCount,

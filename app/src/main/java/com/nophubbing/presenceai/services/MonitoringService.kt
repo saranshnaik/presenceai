@@ -81,16 +81,18 @@ class MonitoringService : Service() {
     private fun collectAndSaveSignals() {
         Log.d("PresenceAI", "Collecting live signals for ML pipeline...")
 
-        // VAD — best effort; -1 means permission denied
+        // VAD — detectVoice() now returns a float confidence score.
+        // Negative values mean permission denied / hardware error → treat as 0 (no voice).
         featureExtractor.currentVadEnergy = try {
             val v = voiceMonitor.detectVoice()
-            if (v < 0) 0f else v.toFloat()
+            if (v < 0f) 0f else v          // v is already 0.0–1.0
         } catch (e: Exception) { 0f }
 
-        // BLE proximity — best effort; -1 means permission denied
+        // BLE proximity — detectProximity() returns a float confidence score.
+        // 0.9 = connected paired device, 0.5 = anonymous BLE nearby, 0 = none, <0 = error.
         featureExtractor.currentBleSocial = try {
             val p = proximityMonitor.detectProximity()
-            if (p <= 0) 0f else 1f
+            if (p < 0f) 0f else p          // p is already 0.0–1.0
         } catch (e: Exception) { 0f }
 
         val features = featureExtractor.extractFeatures(windowMinutes = 10)

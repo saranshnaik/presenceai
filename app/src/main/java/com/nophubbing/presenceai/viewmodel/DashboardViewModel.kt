@@ -160,33 +160,31 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     // ── Live ticker: smooth 1-second score update ─────────────────────────────
 
     /**
-     * Re-runs inference every second on the latest signals.
-     * Adds a small time-decay nudge to unlock_count_per_hour so the score
-     * drifts upward naturally as time passes without the phone being put down.
+     * Re-runs inference every second on the latest signals WITHOUT modifying
+     * any features. The ageFactor was removed because inflating unlockCountPerHour
+     * caused P(phub) to rise each second, dropping the score while the user was
+     * not phubbing — the opposite of intended behaviour.
+     *
+     * Instead, we re-run inference with the exact same feature row each tick so
+     * the score stays stable between fast-path updates. The only effect is that
+     * shouldNudge is re-evaluated, keeping the nudge state fresh.
+     *
      * This is display only — does NOT update model weights.
      */
     private fun tickScore(s: BehaviorSignals) {
         try {
-            // Age factor: each second of the 5s window that passes makes unlocks
-            // feel slightly more recent. Caps at 1.15× so it doesn't over-inflate.
-            val secondsSinceUpdate = ((System.currentTimeMillis() - s.timestamp) / 1_000L)
-                .coerceIn(0, 5)
-            val ageFactor = 1.0f + (secondsSinceUpdate * 0.03f)  // up to +15%
+            val row  = s.toSignalRow()
+            val fv   = FeatureEngineering.buildFeatureVector(row).asList()
+            val pD   = LrClassifier.predict(fv, pipelineRunner.weights).toFloat()
+            val pP   = LrClassifier.computePPhub(fv, pipelineRunner.weights, config).toFloat()
+            val nudge = LrClassifier.shouldNudge(fv, pipelineRunner.weights, config)
 
-            val row = s.toSignalRow().copy(
-                unlockCountPerHour = (s.unlockCountPerHour * ageFactor).toDouble()
-            )
-            val fv     = FeatureEngineering.buildFeatureVector(row).asList()
-            val pDrift = LrClassifier.predict(fv, pipelineRunner.weights).toFloat()
-            val pPhub  = LrClassifier.computePPhub(fv, pipelineRunner.weights, config).toFloat()
-            val nudge  = LrClassifier.shouldNudge(fv, pipelineRunner.weights, config)
-
-            _pDrift.value        = pDrift
-            _pPhub.value         = pPhub
-            _presenceScore.value = scoreFromPhub(pPhub)
+            _pDrift.value        = pD
+            _pPhub.value         = pP
+            _presenceScore.value = scoreFromPhub(pP)
             _shouldNudge.value   = nudge
 
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Ticker failures are non-fatal — next tick will retry
         }
     }

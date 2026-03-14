@@ -7,49 +7,30 @@ import android.util.Log
 
 /**
  * FeatureExtractor.kt — reads real device signals from UsageStatsManager.
- * Produces FeatureMetrics with ALL fields required by the 14-feature ML model.
- *
- * Fields added vs original:
- *  - avgMicroSessionDurationS  (was missing → always 0 in old code)
- *  - avgNotifToUnlockGapS      (was missing → always 0 in old code)
- *  - unlockCountPerHour        (was unlock_freq; renamed to match schema)
- *  - vadEnergy / bleSocial     (floats; set by VoiceMonitor / BleScanner externally)
  */
 class FeatureExtractor(private val context: Context) {
 
-    data class Session(val packageName: String, val startTime: Long, var endTime: Long) {
+    data class Session(val packageName: String, val startTime: Long, val endTime: Long) {
         val durationMs get() = endTime - startTime
     }
 
     data class FeatureMetrics(
-        // Core behavioral
-        val unlockCountPerHour: Float,         // x5
-        val microSessionRatio: Float,           // derived → x6 ratio
-        val notifReflexRatio: Float,            // derived → x7 ratio
-        val timePhase: Float,                   // x9
-
-        // Duration-based (new — needed for 14-feature model)
-        val avgMicroSessionDurationS: Float,    // x6 absolute value
-        val avgNotifToUnlockGapS: Float,        // x7 absolute value
-
-        // Social context (populated by VoiceMonitor / BleScanner)
-        val vadEnergy: Float,                   // x10/x12
-        val bleSocial: Float,                   // x11/x13
-
-        // Counts for UI
+        val unlockCountPerHour: Float,
+        val rawUnlockCount: Int,          // actual unlocks in the window (not extrapolated)
+        val microSessionRatio: Float,
+        val notifReflexRatio: Float,
+        val timePhase: Float,
+        val avgMicroSessionDurationS: Float,
+        val avgNotifToUnlockGapS: Float,
+        val vadEnergy: Float,
+        val bleSocial: Float,
         val totalSessions: Int,
         val microSessionCount: Int,
         val notifReflexCount: Int,
-
-        // Category breakdown — new
         val categoryBreakdown: List<AppCategoryClassifier.CategoryBreakdown> = emptyList(),
         val dominantCategory: AppCategoryClassifier.Category? = null
     )
 
-    /**
-     * External setters — called by VoiceMonitor and BleScanner before extractFeatures().
-     * Defaults to 0.0 when permissions not granted.
-     */
     var currentVadEnergy: Float = 0f
     var currentBleSocial: Float = 0f
 
@@ -106,54 +87,68 @@ class FeatureExtractor(private val context: Context) {
         }
         val unlocksPerHour = unlocks.toFloat() * (60f / windowMinutes)
 
+        // Detailed session logs for debugging
+        Log.d("PresenceAI", "-------------")
+        rawSessions.forEach { s ->
+            Log.d("PresenceAI", "Session: ${s.packageName} | duration(ms): ${s.durationMs}")
+        }
+
         if (rawSessions.isEmpty()) {
             Log.d("PresenceAI", "Sessions: 0 | Unlocks: $unlocks")
-            return emptyMetrics().copy(unlockCountPerHour = unlocksPerHour, timePhase = timePhase)
+            return emptyMetrics().copy(unlockCountPerHour = unlocksPerHour, rawUnlockCount = unlocks, timePhase = timePhase)
         }
 
-        // Merge adjacent same-package sessions with gap < 3s
-        val merged = mutableListOf<Session>()
-        var cur = rawSessions[0]
+        // ── Two separate lists serve two different purposes ────────────────────
+        //
+        // rawSessions = individual app-switch events as recorded by UsageStats.
+        //   Used for: totalSessions (app switch count), micro-session detection,
+        //   notification-reflex detection, avgMicroDurS, avgNotifGapS.
+        //   These should NEVER be merged — each switch is a discrete behaviour.
+        //
+        // mergedForCategory = same-package entries collapsed only when they are
+        //   re-entries within 500 ms (e.g. activity rotation, dialog dismiss).
+        //   Used ONLY for AppCategoryClassifier duration totals.
+        //   500 ms is tight enough to avoid collapsing real separate sessions.
+
+        val mergedForCategory = mutableListOf<Session>()
+        var cur = rawSessions[0].copy()   // copy so we don't mutate the original
         for (i in 1 until rawSessions.size) {
             val next = rawSessions[i]
-            if (next.packageName == cur.packageName && (next.startTime - cur.endTime) < 3_000) {
-                cur.endTime = next.endTime
-            } else { merged.add(cur); cur = next }
+            // Only collapse if same package AND gap < 500 ms (true re-entry artifact)
+            if (next.packageName == cur.packageName && (next.startTime - cur.endTime) < 500) {
+                cur = cur.copy(endTime = next.endTime)
+            } else {
+                mergedForCategory.add(cur)
+                cur = next.copy()
+            }
         }
-        merged.add(cur)
+        mergedForCategory.add(cur)
 
-        val micro = mutableListOf<Session>()   // < 20s
-        val reflex = mutableListOf<Session>()  // < 5s (notification reflex)
+        // Micro and reflex detection operates on raw individual app switches
+        val micro  = rawSessions.filter { it.durationMs in 1..19_999 }
+        val reflex = rawSessions.filter { it.durationMs in 1..4_999 }
 
-        merged.forEach { s ->
-            val durMs = s.durationMs
-            if (durMs < 20_000) micro.add(s)
-            if (durMs < 5_000)  reflex.add(s)
-            Log.d("PresenceAI", "Session: ${s.packageName} | duration(ms): $durMs")
-        }
-
-        val total = merged.size
-        val microRatio  = if (total > 0) micro.size.toFloat() / total else 0f
-        val reflexRatio = if (total > 0) reflex.size.toFloat() / total else 0f
+        val totalRaw    = rawSessions.size
+        val microRatio  = if (totalRaw > 0) micro.size.toFloat() / totalRaw else 0f
+        val reflexRatio = if (totalRaw > 0) reflex.size.toFloat() / totalRaw else 0f
 
         val avgMicroDurS = if (micro.isNotEmpty())
             micro.sumOf { it.durationMs }.toFloat() / micro.size / 1_000f else 0f
 
-        // Estimate notif-to-unlock gap from reflex sessions
         val avgNotifGapS = if (reflex.isNotEmpty())
             reflex.sumOf { it.durationMs }.toFloat() / reflex.size / 1_000f else 0f
 
-        Log.d("PresenceAI", "-------------")
-        Log.d("PresenceAI", "Sessions: $total")
+        Log.d("PresenceAI", "Sessions (raw switches): $totalRaw")
         Log.d("PresenceAI", "Unlocks (x5): $unlocksPerHour/hr")
-        Log.d("PresenceAI", "Micro Session Ratio (x6): $microRatio")
-        Log.d("PresenceAI", "Notification Reflex Ratio (x7): $reflexRatio")
+        Log.d("PresenceAI", "Micro Sessions (<20s): ${micro.size}  ratio=${"%.2f".format(microRatio)}")
+        Log.d("PresenceAI", "Notif Reflex (<5s): ${reflex.size}  ratio=${"%.2f".format(reflexRatio)}")
         Log.d("PresenceAI", "Time Phase (x9): $timePhase")
-        Log.d("PresenceAI", "Signals aggregated: VAD=${currentVadEnergy.toInt()}, Prox=${if (currentBleSocial > 0) 1 else -1}, Unlocks=$unlocksPerHour")
+        Log.d("PresenceAI", "Signals aggregated: VAD=$currentVadEnergy, Prox=$currentBleSocial")
 
-        val breakdown = AppCategoryClassifier.buildBreakdown(merged)
+        val breakdown = AppCategoryClassifier.buildBreakdown(mergedForCategory)
         return FeatureMetrics(
             unlockCountPerHour       = unlocksPerHour,
+            rawUnlockCount           = unlocks,
             microSessionRatio        = microRatio,
             notifReflexRatio         = reflexRatio,
             timePhase                = timePhase,
@@ -161,7 +156,7 @@ class FeatureExtractor(private val context: Context) {
             avgNotifToUnlockGapS     = avgNotifGapS,
             vadEnergy                = currentVadEnergy,
             bleSocial                = currentBleSocial,
-            totalSessions            = total,
+            totalSessions            = totalRaw,
             microSessionCount        = micro.size,
             notifReflexCount         = reflex.size,
             categoryBreakdown        = breakdown,
@@ -170,19 +165,14 @@ class FeatureExtractor(private val context: Context) {
     }
 
     private fun emptyMetrics() = FeatureMetrics(
-        unlockCountPerHour = 0f, microSessionRatio = 0f, notifReflexRatio = 0f,
+        unlockCountPerHour = 0f, rawUnlockCount = 0, microSessionRatio = 0f, notifReflexRatio = 0f,
         timePhase = 0.4f, avgMicroSessionDurationS = 0f, avgNotifToUnlockGapS = 0f,
         vadEnergy = 0f, bleSocial = 0f, totalSessions = 0, microSessionCount = 0, notifReflexCount = 0,
         categoryBreakdown = emptyList(), dominantCategory = null
     )
 
     private fun isSystemPackage(pkg: String): Boolean {
-        val ignored = listOf(
-            "com.miui.", "com.android.", "com.coloros.", "com.oppo.",
-            "com.google.android.permissioncontroller", "com.google.android.packageinstaller",
-            "com.google.android.gms", "com.google.android.gsf",
-            "com.nophubbing.presenceai"
-        )
+        val ignored = listOf("com.miui.", "com.android.", "com.coloros.", "com.oppo.", "com.google.android.", "com.nophubbing.presenceai")
         return ignored.any { pkg.startsWith(it) }
     }
 }

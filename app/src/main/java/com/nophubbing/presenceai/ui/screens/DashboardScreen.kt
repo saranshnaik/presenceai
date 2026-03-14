@@ -77,6 +77,10 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
                     sessions = signals?.totalSessions ?: 0,
                     microSessions = signals?.microSessions ?: 0,
                     notifReflex = signals?.notificationReflexCount ?: 0,
+                    vadConfidence = signals?.vadConfidenceScore ?: 0f,
+                    voiceDetected = (signals?.voiceActivityDetected ?: 0) > 0,
+                    btStrength = signals?.btSignalStrength ?: 0f,
+                    peopleNearby = (signals?.peopleNearbyCount ?: 0) > 0,
                     banditStats = banditStats,
                     isRunning = isRunning
                 )
@@ -85,7 +89,11 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
                 3 -> DebugTab(
                     pDrift = pDrift, pPhub = pPhub, presenceScore = presenceScore,
                     updateCount = updateCount, accuracy = accuracy,
-                    banditStats = banditStats, featureVals = featureVals, isRunning = isRunning
+                    banditStats = banditStats, featureVals = featureVals, isRunning = isRunning,
+                    vadConfidence = signals?.vadConfidenceScore ?: 0f,
+                    voiceDetected = (signals?.voiceActivityDetected ?: 0) > 0,
+                    btStrength = signals?.btSignalStrength ?: 0f,
+                    peopleNearby = (signals?.peopleNearbyCount ?: 0) > 0
                 )
             }
         }
@@ -170,6 +178,8 @@ private fun MainDashboard(
     accuracy: Float, updateCount: Int,
     shouldNudge: Boolean, nudgeFormat: NudgeFormat?,
     unlocks: Int, sessions: Int, microSessions: Int, notifReflex: Int,
+    vadConfidence: Float, voiceDetected: Boolean,
+    btStrength: Float, peopleNearby: Boolean,
     banditStats: Map<String, Any>,
     isRunning: Boolean
 ) {
@@ -222,6 +232,32 @@ private fun MainDashboard(
                 "Quick unlock",
                 if (notifReflex > 0) PresencePink else PresenceGreen, Modifier.weight(1f))
         }
+        Spacer(Modifier.height(12.dp))
+
+        // ── VAD + BLE context cards ───────────────────────────────────────────
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Voice Activity Detection card
+            MetricCard(
+                title    = "VOICE",
+                value    = if (voiceDetected) "YES" else "NO",
+                subtitle = "conf ${String.format("%.0f", vadConfidence * 100)}%",
+                accentColor = if (voiceDetected) PresenceGreen else TextMuted,
+                modifier = Modifier.weight(1f)
+            )
+            // Bluetooth proximity card
+            MetricCard(
+                title    = "NEARBY",
+                value    = if (peopleNearby) "YES" else "NO",
+                subtitle = when {
+                    btStrength >= 0.85f -> "paired device"
+                    btStrength >  0f    -> "BLE detected"
+                    else                -> "none found"
+                },
+                accentColor = if (peopleNearby) PresenceBlue else TextMuted,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
         Spacer(Modifier.height(20.dp))
         InsightCard(insightText(pPhub, presenceScore, unlocks, microSessions))
         Spacer(Modifier.height(16.dp))
@@ -310,7 +346,9 @@ private fun PipelineOutputCard(title: String, value: String, color: Color, modif
 private fun DebugTab(
     pDrift: Float, pPhub: Float, presenceScore: Float,
     updateCount: Int, accuracy: Float,
-    banditStats: Map<String, Any>, featureVals: FloatArray, isRunning: Boolean
+    banditStats: Map<String, Any>, featureVals: FloatArray, isRunning: Boolean,
+    vadConfidence: Float, voiceDetected: Boolean,
+    btStrength: Float, peopleNearby: Boolean
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
         Text("DEBUG CONSOLE", color = TextMuted, fontSize = 10.sp,
@@ -330,6 +368,15 @@ private fun DebugTab(
                 DLine("SCORE",        String.format("%.1f", presenceScore), PresenceBlue)
                 DLine("LR UPDATES",   updateCount.toString(), PresencePurple)
                 DLine("ACCURACY",     "${(accuracy * 100).toInt()}%", PresenceGreen)
+                DSep()
+                DLine("VAD CONF",     String.format("%.3f", vadConfidence), if (voiceDetected) PresenceGreen else TextSecondary)
+                DLine("VOICE",        if (voiceDetected) "DETECTED" else "none", if (voiceDetected) PresenceGreen else TextSecondary)
+                DLine("BT STRENGTH",  String.format("%.2f", btStrength), if (peopleNearby) PresenceBlue else TextSecondary)
+                DLine("NEARBY",       when {
+                    btStrength >= 0.85f -> "PAIRED DEVICE"
+                    btStrength >  0f    -> "BLE NEARBY"
+                    else                -> "none"
+                }, if (peopleNearby) PresenceBlue else TextSecondary)
                 DSep()
                 featureVals.forEachIndexed { i, v ->
                     DLine(FEATURE_NAMES[i], String.format("%.4f", v), TextSecondary)
