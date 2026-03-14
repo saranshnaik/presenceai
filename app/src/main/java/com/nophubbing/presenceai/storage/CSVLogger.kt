@@ -130,7 +130,6 @@ class CSVLogger(private val context: Context) {
             tmp.renameTo(file)
         } catch (e: Exception) {
             Log.e("PresenceAI", "CSVLogger.updateLastRowLabel failed: ${e.message}")
-            Log.e("PresenceAI", "CSVLogger.updateLastRowLabel failed: ${e.message}")
         }
     }
 
