@@ -4,6 +4,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.util.Log
+import java.util.Calendar
 
 /**
  * FeatureExtractor.kt — reads real device signals from UsageStatsManager.
@@ -47,6 +48,14 @@ class FeatureExtractor(private val context: Context) {
             var sessionStart = 0L
             var unlocks = 0
 
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.eventType == 18) unlocks++   // KEYGUARD_HIDDEN = unlock
+                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                    if (isSystemPackage(event.packageName)) continue
+                    currentPkg?.let {
+                        val dur = event.timeStamp - sessionStart
+                        if (dur > 0) sessions.add(Session(it, sessionStart, event.timeStamp))
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 if (event.eventType == 18) unlocks++   // KEYGUARD_HIDDEN = unlock
@@ -176,3 +185,4 @@ class FeatureExtractor(private val context: Context) {
         return ignored.any { pkg.startsWith(it) }
     }
 }
+

@@ -1,10 +1,13 @@
 package com.nophubbing.presenceai.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nophubbing.presenceai.analytics.AppCategoryClassifier
 import com.nophubbing.presenceai.integration.PostNudgeObserver
+import com.nophubbing.presenceai.storage.CSVLogger
+import com.nophubbing.presenceai.analytics.AppCategoryClassifier
 import com.nophubbing.presenceai.storage.CSVLogger
 import com.nophubbing.presenceai.analytics.BehaviorSignals
 import com.nophubbing.presenceai.analytics.SignalRepository
@@ -13,8 +16,10 @@ import com.nophubbing.presenceai.rl.Bandit
 import com.nophubbing.presenceai.rl.BanditState
 import com.nophubbing.presenceai.rl.BanditStore
 import com.nophubbing.presenceai.rl.NudgeFormat
+import com.nophubbing.presenceai.services.*
 import com.nophubbing.presenceai.storage.CSVReader
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -33,7 +38,12 @@ import kotlinx.coroutines.launch
  *    score visibly moves every second without needing a new UsageStats query.
  *    This is display-only — weights are NOT updated by the ticker.
  *
- * Result: the presence circle animates smoothly every second.
+ * Nudge flow (P(phub) >= 0.50):
+ *    Pipeline detects should_nudge → NudgingSystem fires notification
+ *    → User taps Accept/Dismiss → NudgeFeedbackReceiver
+ *    → FeedbackActivityMonitor (20s observation window)
+ *    → Final label merging user response + activity
+ *    → OnlineLearnerPort adapter → PipelineRunner weight update + save
  */
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -41,17 +51,51 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val config = PipelineConfig()
 
     private val pipelineRunner = PipelineRunner(config).also { runner ->
-        // loadForStartup() handles schema version check internally —
-        // old v1 weights are deleted and defaults returned automatically.
-        runner.weights = ModelStore.loadForStartup(app)
-        android.util.Log.d("PresenceAI_ML",
-            "Startup weights loaded: bias=${runner.weights.bias}, updates=${runner.weights.update_count}")
+        val saved = ModelStore.seedIfEmpty(app)
+        if (saved.update_count > 0) runner.weights = saved
     }
 
     private val banditStore = BanditStore(app)
     private var banditState: BanditState = banditStore.load()
-    private val postNudgeObserver = PostNudgeObserver(app)
     private val csvLogger = CSVLogger(app)
+
+    // ── Nudging system: fires notification when P(phub) >= 0.50 ──────────────
+    private val nudgingSystem = NudgingSystem(app)
+
+    // ── OnlineLearnerPort adapter: bridges FeedbackActivityMonitor → PipelineRunner ──
+    private val onlineLearnerAdapter = object : OnlineLearnerPort {
+        override fun update(features: FloatArray, label: Int) {
+            try {
+                val fv = features.map { it.toDouble() }
+                val labelD = label.toDouble()
+                pipelineRunner.weights = OnlineLearner.update(
+                    fv, labelD, pipelineRunner.weights, config
+                )
+                ModelStore.saveWeights(app, pipelineRunner.weights)
+                _accuracy.value    = pipelineRunner.currentAccuracy()
+                _updateCount.value = pipelineRunner.weights.update_count
+                Log.d("PresenceAI_VM", "Online learning update: label=$label, " +
+                    "updates=${pipelineRunner.weights.update_count}")
+            } catch (e: Exception) {
+                Log.e("PresenceAI_VM", "OnlineLearner adapter failed: ${e.message}")
+            }
+        }
+    }
+
+    // ── SignalProvider: captures snapshots for FeedbackActivityMonitor ────────
+    private val signalProvider = object : SignalProvider {
+        override suspend fun captureSnapshot(): FeedbackActivityMonitor.SignalSnapshot {
+            val s = _signals.value
+            val fv = _featureValues.value
+            return FeedbackActivityMonitor.SignalSnapshot(
+                unlockCount   = s?.unlocks ?: 0,
+                sessionCount  = s?.totalSessions ?: 0,
+                phubbingScore = _pPhub.value * 100f,
+                notifReflexes = s?.notificationReflexCount ?: 0,
+                features      = fv
+            )
+        }
+    }
 
     // ── Exposed StateFlows ────────────────────────────────────────────────────
 
@@ -82,10 +126,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _banditStats    = MutableStateFlow<Map<String, Any>>(emptyMap())
     val banditStats: StateFlow<Map<String, Any>> = _banditStats.asStateFlow()
 
-    // Exposed so GenAI context builder can read today's nudge count
-    private val _nudgeCountToday = MutableStateFlow(0)
-    val nudgeCountToday: StateFlow<Int> = _nudgeCountToday.asStateFlow()
-
     private val _featureValues  = MutableStateFlow(FloatArray(FEATURE_NAMES.size) { 0f })
     val featureValues: StateFlow<FloatArray> = _featureValues.asStateFlow()
 
@@ -95,6 +135,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     // ── Init ──────────────────────────────────────────────────────────────────
 
     init {
+        // Start the nudging system
+        nudgingSystem.start()
+
+        // Initialize FeedbackActivityMonitor with our adapters
+        FeedbackActivityMonitor.init(onlineLearnerAdapter, signalProvider)
+
         // Seed accuracy from historical CSV
         viewModelScope.launch {
             val historical = CSVReader.readAllAsSignalRows(app)
@@ -102,7 +148,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 pipelineRunner.run(historical)
                 _accuracy.value    = pipelineRunner.currentAccuracy()
                 _updateCount.value = pipelineRunner.weights.update_count
-                android.util.Log.d("PresenceAI_ML",
+                Log.d("PresenceAI_ML",
                     "Historical: ${historical.size} rows, acc=${(_accuracy.value * 100).toInt()}%")
             }
             _banditStats.value = Bandit.getStats(banditState)
@@ -135,11 +181,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
             val format: NudgeFormat? = if (step.should_nudge) Bandit.selectAction(banditState) else null
 
-            // Start 45s observation window when a nudge fires
+            // Fire notification when P(phub) >= 0.50 crosses the threshold
+            // NudgingSystem handles cooldown to avoid spam.
+            // Notification has Accept/Dismiss buttons → NudgeFeedbackReceiver
+            // → FeedbackActivityMonitor (20s observation) → online learning
             if (step.should_nudge && format != null) {
-                postNudgeObserver.start(format) { resolved ->
-                    onLabelResolved(resolved.lrLabel, resolved.banditReward, format)
-                }
+                val socialPresent = s.voiceActivityDetected > 0 || s.peopleNearbyCount > 0
+                nudgingSystem.onScoreUpdate(
+                    score = step.p_phub.toFloat() * 100f,
+                    socialPresent = socialPresent
+                )
             }
 
             val fv = FeatureEngineering.buildFeatureVector(row).asList()
@@ -155,49 +206,50 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             _banditStats.value     = Bandit.getStats(banditState)
             _featureValues.value   = FloatArray(fv.size) { fv[it].toFloat() }
             _categoryBreakdown.value = s.categoryBreakdown
-            _nudgeCountToday.value = csvLogger.getNudgeCountToday()
 
-            android.util.Log.d("PresenceAI_ML",
+            Log.d("PresenceAI_ML",
                 "Accuracy: ${(_accuracy.value * 100).toInt()}%, P(Phub): ${step.p_phub}")
 
         } catch (e: Exception) {
-            android.util.Log.e("PresenceAI_VM", "processSignals: ${e.message}")
+            Log.e("PresenceAI_VM", "processSignals: ${e.message}")
         }
     }
 
     // ── Live ticker: smooth 1-second score update ─────────────────────────────
 
     /**
-     * Re-runs inference every second on the latest signals WITHOUT modifying
-     * any features. The ageFactor was removed because inflating unlockCountPerHour
-     * caused P(phub) to rise each second, dropping the score while the user was
-     * not phubbing — the opposite of intended behaviour.
-     *
-     * Instead, we re-run inference with the exact same feature row each tick so
-     * the score stays stable between fast-path updates. The only effect is that
-     * shouldNudge is re-evaluated, keeping the nudge state fresh.
-     *
+     * Re-runs inference every second on the latest signals.
+     * Adds a small time-decay nudge to unlock_count_per_hour so the score
+     * drifts upward naturally as time passes without the phone being put down.
      * This is display only — does NOT update model weights.
      */
     private fun tickScore(s: BehaviorSignals) {
         try {
-            val row  = s.toSignalRow()
-            val fv   = FeatureEngineering.buildFeatureVector(row).asList()
-            val pD   = LrClassifier.predict(fv, pipelineRunner.weights).toFloat()
-            val pP   = LrClassifier.computePPhub(fv, pipelineRunner.weights, config).toFloat()
-            val nudge = LrClassifier.shouldNudge(fv, pipelineRunner.weights, config)
+            // Age factor: each second of the 5s window that passes makes unlocks
+            // feel slightly more recent. Caps at 1.15× so it doesn't over-inflate.
+            val secondsSinceUpdate = ((System.currentTimeMillis() - s.timestamp) / 1_000L)
+                .coerceIn(0, 5)
+            val ageFactor = 1.0f + (secondsSinceUpdate * 0.03f)  // up to +15%
 
-            _pDrift.value        = pD
-            _pPhub.value         = pP
-            _presenceScore.value = scoreFromPhub(pP)
+            val row = s.toSignalRow().copy(
+                unlockCountPerHour = (s.unlockCountPerHour * ageFactor).toDouble()
+            )
+            val fv     = FeatureEngineering.buildFeatureVector(row).asList()
+            val pDrift = LrClassifier.predict(fv, pipelineRunner.weights).toFloat()
+            val pPhub  = LrClassifier.computePPhub(fv, pipelineRunner.weights, config).toFloat()
+            val nudge  = LrClassifier.shouldNudge(fv, pipelineRunner.weights, config)
+
+            _pDrift.value        = pDrift
+            _pPhub.value         = pPhub
+            _presenceScore.value = scoreFromPhub(pPhub)
             _shouldNudge.value   = nudge
 
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Ticker failures are non-fatal — next tick will retry
         }
     }
 
-    // ── Label resolution (after 45s observation) ─────────────────────────────
+    // ── Label resolution (called from FeedbackActivityMonitor via adapter) ───
 
     fun onLabelResolved(label: Double, reward: Float, format: NudgeFormat) {
         viewModelScope.launch {
@@ -222,14 +274,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 _accuracy.value    = pipelineRunner.currentAccuracy()
 
             } catch (e: Exception) {
-                android.util.Log.e("PresenceAI_VM", "onLabelResolved: ${e.message}")
+                Log.e("PresenceAI_VM", "onLabelResolved: ${e.message}")
             }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        postNudgeObserver.stop()
+        nudgingSystem.destroy()
+        FeedbackActivityMonitor.getInstance()?.destroy()
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

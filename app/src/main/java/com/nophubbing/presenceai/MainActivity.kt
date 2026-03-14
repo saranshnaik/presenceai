@@ -1,6 +1,5 @@
 package com.nophubbing.presenceai
 
-import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -17,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import com.nophubbing.presenceai.services.MonitoringService
 import com.nophubbing.presenceai.ui.screens.DashboardScreen
+import com.nophubbing.presenceai.utils.PermissionManager
 import com.nophubbing.presenceai.utils.PermissionManager
 
 class MainActivity : ComponentActivity() {
@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val context = this
 
         // Edge-to-edge UI
         WindowCompat.setDecorFitsSystemWindows(window, false)
