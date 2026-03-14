@@ -34,7 +34,7 @@
         </activity>
 
         <receiver
-            android:name=".services.UnlockReceiver"
+            android:name=".signals.UnlockTracker"
             android:exported="true">
 
             <intent-filter>
@@ -44,7 +44,7 @@
         </receiver>
 
         <service
-            android:name=".services.NotificationListener"
+            android:name=".signals.NotificationMonitor"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
 
