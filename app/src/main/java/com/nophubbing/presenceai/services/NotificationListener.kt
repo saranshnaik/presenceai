@@ -13,6 +13,11 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
 
+        Log.d(
+            "PresenceAI",
+            "DETECTED_NOTIFICATION_LISTENER for ${sbn.packageName}, current lastNotificationTime=${NotificationTracker.lastNotificationTime}"
+        )
+
         NotificationCounter.notificationCount++
         NotificationTracker.lastNotificationTime = System.currentTimeMillis()
 
@@ -28,7 +33,7 @@ class NotificationListener : NotificationListenerService() {
 
         Log.d(
             "PresenceAI",
-            "Notification received from ${sbn.packageName}"
+            "Notification received from ${sbn.packageName}, updated lastNotificationTime=${NotificationTracker.lastNotificationTime}, totalNotifications=${NotificationCounter.notificationCount}"
         )
     }
 }

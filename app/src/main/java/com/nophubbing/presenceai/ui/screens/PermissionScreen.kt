@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import com.nophubbing.presenceai.ui.components.PermissionCard
 import com.nophubbing.presenceai.utils.PermissionManager
 
@@ -25,6 +26,10 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
 
     var btEnabled by remember {
         mutableStateOf(PermissionManager.hasBluetoothPermission(context))
+    }
+
+    var notifEnabled by remember {
+        mutableStateOf(NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName))
     }
 
     val micPermissionLauncher =
@@ -76,6 +81,24 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
 
                     val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                     context.startActivity(intent)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            PermissionCard(
+                title = "Notification Access",
+                description = "Detect notifications to measure notification reflex",
+                required = true,
+                enabled = notifEnabled,
+                onToggle = {
+                    // Android does not provide a runtime permission dialog for this.
+                    // We must route the user to system settings.
+                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                    context.startActivity(intent)
+                    notifEnabled = NotificationManagerCompat
+                        .getEnabledListenerPackages(context)
+                        .contains(context.packageName)
                 }
             )
 

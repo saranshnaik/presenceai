@@ -117,6 +117,11 @@ class FeatureExtractor(private val context: Context) {
             )
         }
 
+        Log.d(
+            "PresenceAI",
+            "FeatureExtractor.computeMetrics called with ${rawSessions.size} raw sessions, lastNotificationTime=${NotificationTracker.lastNotificationTime}"
+        )
+
         val mergedSessions = mutableListOf<Session>()
         var current = rawSessions[0]
 
@@ -159,6 +164,15 @@ class FeatureExtractor(private val context: Context) {
             val reactionDelay = s.startTime - NotificationTracker.lastNotificationTime
             if (reactionDelay in 0..5000) {
                 notificationReflex++
+                Log.d(
+                    "PresenceAI",
+                    "Notification reflex detected for session index=$i, pkg=${s.packageName}, reactionDelay=$reactionDelay, notificationReflex=$notificationReflex"
+                )
+            } else {
+                Log.d(
+                    "PresenceAI",
+                    "Session index=$i did NOT count as notification reflex. pkg=${s.packageName}, reactionDelay=$reactionDelay, lastNotificationTime=${NotificationTracker.lastNotificationTime}"
+                )
             }
 
             // #region agent log
@@ -175,7 +189,7 @@ class FeatureExtractor(private val context: Context) {
 
             Log.d(
                 "PresenceAI",
-                "Session: ${s.packageName} duration(ms): $duration"
+                "Session index=$i pkg=${s.packageName} start=${s.startTime} end=${s.endTime} duration=$duration gap=$gap"
             )
         }
 
@@ -184,7 +198,7 @@ class FeatureExtractor(private val context: Context) {
 
         Log.d("PresenceAI", "-------------")
         Log.d("PresenceAI", "Micro Sessions (<15s + rapid reopen): $microSessions")
-        Log.d("PresenceAI", "Notification Reflex (<5s sessions): $notificationReflex")
+        Log.d("PresenceAI", "Notification Reflex (notif -> open within 5s): $notificationReflex")
         Log.d("PresenceAI", "Behavior Drift: $behaviorDrift")
 
         return FeatureMetrics(

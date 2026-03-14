@@ -22,6 +22,7 @@ class MonitoringService : Service() {
     private lateinit var featureExtractor: FeatureExtractor
     private lateinit var signalAggregator: SignalAggregator
     private lateinit var csvLogger: CSVLogger
+    private lateinit var unlockDetector: UnlockDetector
 
     private val interval: Long = 60 * 1000
 
@@ -38,13 +39,31 @@ class MonitoringService : Service() {
         featureExtractor = FeatureExtractor(this)
         signalAggregator = SignalAggregator()
         csvLogger = CSVLogger(this)
+        unlockDetector = UnlockDetector(this)
     }
 
     private fun collectAndSaveSignals() {
 
+        Log.d(
+            "PresenceAI",
+            "collectAndSaveSignals: usageAccess=${PermissionManager.hasUsageStatsPermission(this)} notifLast=${com.nophubbing.presenceai.analytics.NotificationTracker.lastNotificationTime} broadcastUnlocks=${UnlockCounter.unlockCount}"
+        )
+
         val features = featureExtractor.extractFeatures(windowMinutes = 1)
 
-        val unlocks = UnlockCounter.unlockCount
+        val unlocksFromBroadcast = UnlockCounter.unlockCount
+        val unlocksFromUsage = try {
+            unlockDetector.getUnlockCount()
+        } catch (e: Exception) {
+            Log.e("PresenceAI", "Error reading unlocks from UsageStats", e)
+            0
+        }
+        val unlocks = unlocksFromBroadcast + unlocksFromUsage
+
+        Log.d(
+            "PresenceAI",
+            "Unlocks this interval: broadcast=$unlocksFromBroadcast, usageStats=$unlocksFromUsage, total=$unlocks"
+        )
 
         val micAllowed = PermissionManager.hasMicPermission(this)
         val bluetoothAllowed = PermissionManager.hasBluetoothPermission(this)
@@ -56,6 +75,11 @@ class MonitoringService : Service() {
         val proximityDetected =
             if (bluetoothAllowed) proximityMonitor.detectProximity()
             else -1
+
+        Log.d(
+            "PresenceAI",
+            "SENSOR_RESULTS micAllowed=$micAllowed bluetoothAllowed=$bluetoothAllowed voiceDetected=$voiceDetected proximityDetected=$proximityDetected"
+        )
 
         val signals = signalAggregator.generateSignals(
             unlocks = unlocks,

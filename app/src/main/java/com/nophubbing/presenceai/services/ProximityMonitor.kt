@@ -66,7 +66,11 @@ class ProximityMonitor(private val context: Context) {
 
             context.unregisterReceiver(receiver)
 
-            if (deviceDetected) 1 else 0
+            val result = if (deviceDetected) 1 else 0
+
+            Log.d("PresenceAI", "PROXIMITY_SCAN_COMPLETE deviceDetected=$deviceDetected result=$result")
+
+            result
 
         } catch (e: Exception) {
 

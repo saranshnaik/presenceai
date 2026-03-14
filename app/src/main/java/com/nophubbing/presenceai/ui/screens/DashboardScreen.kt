@@ -23,7 +23,7 @@ fun DashboardScreen(
     val signals by viewModel.signals.collectAsState()
     val context = LocalContext.current
 
-    var monitoring by remember { mutableStateOf(MonitoringState.isRunning) }
+    val monitoring = MonitoringState.isRunning
 
     val unlocks = signals?.unlocks ?: 0
     val microSessions = signals?.microSessions ?: 0
@@ -79,17 +79,15 @@ fun DashboardScreen(
 
                 val intent = Intent(context, MonitoringService::class.java)
 
-                if (!monitoring) {
+                if (!MonitoringState.isRunning) {
 
                     context.startForegroundService(intent)
                     MonitoringState.isRunning = true
-                    monitoring = true
 
                 } else {
 
                     context.stopService(intent)
                     MonitoringState.isRunning = false
-                    monitoring = false
                 }
             }
         ) {
