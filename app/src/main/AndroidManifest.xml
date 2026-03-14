@@ -8,8 +8,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
 
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
@@ -20,6 +26,11 @@
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions"/>
+
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+
 
     <application
         android:allowBackup="true"
@@ -50,7 +61,10 @@
 
         </receiver>
 
-        <!-- Notification listener -->
+        <receiver
+            android:name=".services.NudgeFeedbackReceiver"
+            android:exported="false"/>
+
         <service
             android:name=".services.NotificationListener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
@@ -66,12 +80,7 @@
         <service
             android:name=".services.MonitoringService"
             android:exported="false"
-            android:foregroundServiceType="microphone|dataSync"/>
-
-<!--        <service-->
-<!--            android:name=".services.MonitoringService"-->
-<!--            android:foregroundServiceType="microphone|dataSync"-->
-<!--            android:exported="false" />-->
+            android:foregroundServiceType="microphone|dataSync|connectedDevice"/>
 
     </application>
 

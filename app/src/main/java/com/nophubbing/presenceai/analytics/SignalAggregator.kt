@@ -18,6 +18,18 @@ class SignalAggregator(private val context: Context) {
 
         // pDrift and presenceScore are filled by DashboardViewModel after ML inference.
         // CSVLogger.updateLastRowLabel() backfills them once the 45s label is resolved.
+    fun generateSignals(features: FeatureExtractor.FeatureMetrics): BehaviorSignals {
+        val cal     = Calendar.getInstance()
+        val hour    = cal.get(Calendar.HOUR_OF_DAY)
+        val isEvening = if (hour >= 18 || hour < 5) 1 else 0
+
+        // Baseline values (personalised over time via online learning)
+        val baselineUnlocks = 3.6f
+        // behavior_drift_score: z-score of unlock rate vs baseline
+        val driftScore = (features.unlockCountPerHour - baselineUnlocks) / maxOf(baselineUnlocks, 0.1f)
+
+        // pDrift and presenceScore are filled by DashboardViewModel after ML inference.
+        // CSVLogger.updateLastRowLabel() backfills them once the 45s label is resolved.
         return BehaviorSignals(
             hourOfDay               = hour,
             isEveningSession        = isEvening,
@@ -55,3 +67,4 @@ class SignalAggregator(private val context: Context) {
         )
     }
 }
+

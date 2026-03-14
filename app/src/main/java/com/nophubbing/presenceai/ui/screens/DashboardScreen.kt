@@ -4,10 +4,18 @@ import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.*
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
@@ -16,7 +24,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.*
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nophubbing.presenceai.ml.FEATURE_NAMES
+import com.nophubbing.presenceai.analytics.AppCategoryClassifier
+import com.nophubbing.presenceai.rl.NudgeFormat
 import com.nophubbing.presenceai.ml.FEATURE_NAMES
 import com.nophubbing.presenceai.analytics.AppCategoryClassifier
 import com.nophubbing.presenceai.rl.NudgeFormat
@@ -24,6 +38,7 @@ import com.nophubbing.presenceai.services.MonitoringService
 import com.nophubbing.presenceai.services.MonitoringState
 import com.nophubbing.presenceai.services.MonitoringState
 import com.nophubbing.presenceai.ui.components.*
+import com.nophubbing.presenceai.ui.theme.*
 import com.nophubbing.presenceai.ui.theme.*
 import com.nophubbing.presenceai.viewmodel.DashboardViewModel
 
@@ -209,6 +224,11 @@ private fun MainDashboard(
             )
         }
 
+        Spacer(Modifier.height(16.dp))
+
+        NudgeAlert(visible = shouldNudge, nudgeFormat = nudgeFormat,
+            nudgeText = nudgeText(pPhub, unlocks))
+        if (shouldNudge) Spacer(Modifier.height(16.dp))
         Spacer(Modifier.height(16.dp))
 
         NudgeAlert(visible = shouldNudge, nudgeFormat = nudgeFormat,
