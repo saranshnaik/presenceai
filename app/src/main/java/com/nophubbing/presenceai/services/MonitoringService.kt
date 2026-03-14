@@ -5,9 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.nophubbing.presenceai.analytics.FeatureExtractor
 import com.nophubbing.presenceai.analytics.SignalAggregator
@@ -17,7 +16,6 @@ import com.nophubbing.presenceai.utils.PermissionManager
 
 class MonitoringService : Service() {
 
-//    private val handler = Handler(Looper.getMainLooper())
     private val voiceMonitor = VoiceMonitor()
     private val proximityMonitor by lazy { ProximityMonitor(this) }
 
@@ -25,22 +23,21 @@ class MonitoringService : Service() {
     private lateinit var signalAggregator: SignalAggregator
     private lateinit var csvLogger: CSVLogger
 
-    private val interval: Long = 60 * 1000   // 1 minute
+    private val interval: Long = 60 * 1000
 
-    private var running = true
-
+    private var running = false
+    private var monitoringThread: Thread? = null
 
     override fun onCreate() {
         super.onCreate()
+
         startForegroundServiceNotification()
+
         MonitoringState.isRunning = true
 
         featureExtractor = FeatureExtractor(this)
-        signalAggregator = SignalAggregator(this)
+        signalAggregator = SignalAggregator()
         csvLogger = CSVLogger(this)
-
-
-//        handler.post(monitorTask)
     }
 
     private fun collectAndSaveSignals() {
@@ -48,13 +45,14 @@ class MonitoringService : Service() {
         val features = featureExtractor.extractFeatures(windowMinutes = 1)
 
         val unlocks = UnlockCounter.unlockCount
-        val notifications = NotificationCounter.notificationCount
 
         val micAllowed = PermissionManager.hasMicPermission(this)
         val bluetoothAllowed = PermissionManager.hasBluetoothPermission(this)
+
         val voiceDetected =
             if (micAllowed) voiceMonitor.detectVoice()
             else -1
+
         val proximityDetected =
             if (bluetoothAllowed) proximityMonitor.detectProximity()
             else -1
@@ -63,15 +61,19 @@ class MonitoringService : Service() {
             unlocks = unlocks,
             microSessions = features.microSessions,
             notificationReflex = features.notificationReflex,
-            behaviorDrift = 0f,
+            behaviorDrift = features.behaviorDrift,
+            timePhase = features.timePhase,
             voiceDetected = voiceDetected,
             proximityDetected = proximityDetected,
             micAllowed = micAllowed,
             bluetoothAllowed = bluetoothAllowed
         )
+
         SignalRepository.update(signals)
 
         csvLogger.logSignals(signals)
+
+        Log.d("PresenceAI", "Signals logged: $signals")
 
         UnlockCounter.unlockCount = 0
         NotificationCounter.notificationCount = 0
@@ -79,20 +81,27 @@ class MonitoringService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
-        Thread {
+        if (running) return START_STICKY
+
+        running = true
+
+        monitoringThread = Thread {
 
             while (running) {
 
                 try {
+
                     collectAndSaveSignals()
+
                     Thread.sleep(interval)
 
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e("PresenceAI", "Monitoring loop error", e)
                 }
             }
+        }
 
-        }.start()
+        monitoringThread?.start()
 
         return START_STICKY
     }
@@ -122,12 +131,30 @@ class MonitoringService : Service() {
         startForeground(1, notification)
     }
 
+    override fun onDestroy() {
+
+        MonitoringState.isRunning = false
+
+        running = false
+
+        monitoringThread?.interrupt()
+
+        super.onDestroy()
+    }
+
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
-    override fun onDestroy() {
-        MonitoringState.isRunning = false
-        running = false
-        super.onDestroy()
-    }
+
+//    fun toFeatureVector(): FloatArray {
+//        return floatArrayOf(
+//            unlocks.toFloat(),
+//            microSessions.toFloat(),
+//            notificationReflex.toFloat(),
+//            behaviorDrift,
+//            timePhase.toFloat(),
+//            voiceDetected.toFloat(),
+//            proximityDetected.toFloat()
+//        )
+//    }
 }

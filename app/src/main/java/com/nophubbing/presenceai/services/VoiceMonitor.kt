@@ -2,32 +2,32 @@ package com.nophubbing.presenceai.services
 
 import android.media.MediaRecorder
 import android.util.Log
-import java.io.IOException
 
 class VoiceMonitor {
 
-    private var recorder: MediaRecorder? = null
-
     fun detectVoice(): Int {
+
+        var recorder: MediaRecorder? = null
 
         return try {
 
-            recorder = MediaRecorder().apply {
+            recorder = MediaRecorder()
 
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
-                setOutputFile("/dev/null")
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+            recorder.setOutputFile("/dev/null")
 
-                prepare()
-                start()
-            }
+            recorder.prepare()
+            recorder.start()
 
             Thread.sleep(1500)
 
-            val amplitude = recorder?.maxAmplitude ?: 0
+            val amplitude = recorder.maxAmplitude
 
-            stopRecording()
+            try {
+                recorder.stop()
+            } catch (_: Exception) {}
 
             if (amplitude > 2000) {
                 Log.d("PresenceAI", "Voice detected amplitude=$amplitude")
@@ -36,23 +36,17 @@ class VoiceMonitor {
                 0
             }
 
-        } catch (e: IOException) {
+        } catch (e: Exception) {
 
-            Log.e("PresenceAI", "Voice detection failed", e)
+            Log.d("PresenceAI", "Voice detection unavailable")
+
             -1
+
+        } finally {
+
+            try {
+                recorder?.release()
+            } catch (_: Exception) {}
         }
-    }
-
-    private fun stopRecording() {
-
-        try {
-            recorder?.apply {
-                stop()
-                release()
-            }
-        } catch (_: Exception) {
-        }
-
-        recorder = null
     }
 }

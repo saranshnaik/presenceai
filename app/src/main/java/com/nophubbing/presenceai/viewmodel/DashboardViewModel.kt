@@ -18,20 +18,32 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val signals: StateFlow<BehaviorSignals?> =
         _signals
 
+    private var lastTimestamp: Long = -1L
+
     init {
+        startMonitoring()
+    }
+
+    private fun startMonitoring() {
 
         viewModelScope.launch {
 
             while (true) {
 
-                val latest =
-                    CSVReader.readLatestSignals(getApplication())
+                try {
 
-                if (latest != null) {
-                    _signals.value = latest
-                }
+                    val latest =
+                        CSVReader.readLatestSignals(getApplication())
 
-                delay(5000)   // refresh every 5s
+                    if (latest != null && latest.timestamp != lastTimestamp) {
+
+                        lastTimestamp = latest.timestamp
+                        _signals.value = latest
+                    }
+
+                } catch (_: Exception) {}
+
+                delay(3000)
             }
         }
     }

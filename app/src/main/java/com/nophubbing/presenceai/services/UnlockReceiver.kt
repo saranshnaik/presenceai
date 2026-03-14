@@ -11,16 +11,48 @@ object UnlockCounter {
 
 class UnlockReceiver : BroadcastReceiver() {
 
+    private var screenOnTime = 0L
+    private var screenOffTime = 0L
+
     override fun onReceive(context: Context?, intent: Intent?) {
 
-        if (intent?.action == Intent.ACTION_USER_PRESENT) {
+        when (intent?.action) {
 
-            UnlockCounter.unlockCount++
+            Intent.ACTION_SCREEN_OFF -> {
 
-            Log.d(
-                "PresenceAI",
-                "Unlock detected. Count = ${UnlockCounter.unlockCount}"
-            )
+                screenOffTime = System.currentTimeMillis()
+
+                Log.d("PresenceAI", "Screen turned off")
+            }
+
+            Intent.ACTION_SCREEN_ON -> {
+
+                screenOnTime = System.currentTimeMillis()
+
+                Log.d("PresenceAI", "Screen turned on")
+            }
+
+            Intent.ACTION_USER_PRESENT -> {
+
+                val now = System.currentTimeMillis()
+
+                val timeSinceScreenOn = now - screenOnTime
+
+                /*
+                 Unlock pattern:
+                 screen on → user present within 15 seconds
+                 */
+
+                if (screenOnTime > screenOffTime && timeSinceScreenOn < 15000) {
+
+                    UnlockCounter.unlockCount++
+
+                    Log.d(
+                        "PresenceAI",
+                        "Unlock detected. Count=${UnlockCounter.unlockCount}"
+                    )
+                }
+            }
         }
     }
 }

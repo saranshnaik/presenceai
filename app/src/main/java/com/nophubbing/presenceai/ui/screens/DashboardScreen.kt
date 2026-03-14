@@ -1,6 +1,7 @@
 package com.nophubbing.presenceai.ui.screens
 
 import android.content.Intent
+import java.util.Calendar
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -10,9 +11,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nophubbing.presenceai.services.MonitoringService
+import com.nophubbing.presenceai.services.MonitoringState
 import com.nophubbing.presenceai.ui.components.*
 import com.nophubbing.presenceai.viewmodel.DashboardViewModel
-import com.nophubbing.presenceai.services.*
 
 @Composable
 fun DashboardScreen(
@@ -20,7 +21,6 @@ fun DashboardScreen(
 ) {
 
     val signals by viewModel.signals.collectAsState()
-
     val context = LocalContext.current
 
     var monitoring by remember { mutableStateOf(MonitoringState.isRunning) }
@@ -28,10 +28,17 @@ fun DashboardScreen(
     val unlocks = signals?.unlocks ?: 0
     val microSessions = signals?.microSessions ?: 0
     val notifReflex = signals?.notificationReflex ?: 0
+    val behaviorDrift = signals?.behaviorDrift ?: 0f
 
     val presenceScore =
-        (100 - (unlocks * 2 + microSessions * 3))
-            .coerceIn(0, 100)
+        (100 -
+                (unlocks * 2 +
+                        microSessions * 3 +
+                        notifReflex * 4 +
+                        (behaviorDrift * 20).toInt())
+                ).coerceIn(0, 100)
+
+    val greeting = remember { getGreeting() }
 
     Column(
         modifier = Modifier
@@ -40,7 +47,7 @@ fun DashboardScreen(
     ) {
 
         Text(
-            "Good morning",
+            greeting,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
@@ -51,7 +58,7 @@ fun DashboardScreen(
             color = MaterialTheme.colorScheme.onBackground
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         Text(
             if (monitoring) "Monitoring Active" else "Monitoring Paused",
@@ -61,6 +68,9 @@ fun DashboardScreen(
                 else
                     MaterialTheme.colorScheme.error
         )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         Button(
             modifier = Modifier
                 .fillMaxWidth()
@@ -69,21 +79,20 @@ fun DashboardScreen(
 
                 val intent = Intent(context, MonitoringService::class.java)
 
-                if (!MonitoringState.isRunning) {
+                if (!monitoring) {
 
                     context.startForegroundService(intent)
                     MonitoringState.isRunning = true
+                    monitoring = true
 
                 } else {
 
                     context.stopService(intent)
                     MonitoringState.isRunning = false
+                    monitoring = false
                 }
-
-                monitoring = MonitoringState.isRunning
             }
-        )
-        {
+        ) {
             Text(if (monitoring) "Stop Monitoring" else "Start Monitoring")
         }
 
@@ -93,9 +102,7 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center
         ) {
-
             PresenceCircle(score = presenceScore)
-
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -104,8 +111,8 @@ fun DashboardScreen(
 
             MetricCard(
                 title = "DRIFT RISK",
-                value = if (presenceScore > 70) "LOW" else "HIGH",
-                subtitle = "Stay mindful",
+                value = if (behaviorDrift > 0.4) "HIGH" else "LOW",
+                subtitle = "Behavior deviation",
                 modifier = Modifier.weight(1f)
             )
 
@@ -114,7 +121,7 @@ fun DashboardScreen(
             MetricCard(
                 title = "UNLOCKS",
                 value = unlocks.toString(),
-                subtitle = "Today",
+                subtitle = "Last interval",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -126,7 +133,7 @@ fun DashboardScreen(
             MetricCard(
                 title = "QUICK CHECKS",
                 value = microSessions.toString(),
-                subtitle = "Under 30s",
+                subtitle = "Micro sessions",
                 modifier = Modifier.weight(1f)
             )
 
@@ -135,7 +142,7 @@ fun DashboardScreen(
             MetricCard(
                 title = "NOTIF REFLEX",
                 value = notifReflex.toString(),
-                subtitle = "Response events",
+                subtitle = "Fast responses",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -143,5 +150,17 @@ fun DashboardScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         InsightCard()
+    }
+}
+
+private fun getGreeting(): String {
+
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+
+    return when (hour) {
+        in 5..11 -> "Good morning"
+        in 12..16 -> "Good afternoon"
+        in 17..21 -> "Good evening"
+        else -> "Good night"
     }
 }

@@ -19,8 +19,13 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
 
     val context = LocalContext.current
 
-    var micEnabled by remember { mutableStateOf(false) }
-    var btEnabled by remember { mutableStateOf(false) }
+    var micEnabled by remember {
+        mutableStateOf(PermissionManager.hasMicPermission(context))
+    }
+
+    var btEnabled by remember {
+        mutableStateOf(PermissionManager.hasBluetoothPermission(context))
+    }
 
     val micPermissionLauncher =
         rememberLauncherForActivityResult(
@@ -31,9 +36,13 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
 
     val bluetoothPermissionLauncher =
         rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            btEnabled = granted
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+
+            val scan = permissions[Manifest.permission.BLUETOOTH_SCAN] ?: false
+            val connect = permissions[Manifest.permission.BLUETOOTH_CONNECT] ?: false
+
+            btEnabled = scan && connect
         }
 
     Column(
@@ -65,9 +74,7 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
                 enabled = PermissionManager.hasUsageStatsPermission(context),
                 onToggle = {
 
-                    val intent =
-                        Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-
+                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                     context.startActivity(intent)
                 }
             )
@@ -94,8 +101,12 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
                 required = false,
                 enabled = btEnabled,
                 onToggle = {
+
                     bluetoothPermissionLauncher.launch(
-                        Manifest.permission.BLUETOOTH_CONNECT
+                        arrayOf(
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_CONNECT
+                        )
                     )
                 }
             )

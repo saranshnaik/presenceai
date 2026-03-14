@@ -5,6 +5,7 @@ import android.util.Log
 import com.nophubbing.presenceai.analytics.BehaviorSignals
 import java.io.File
 import java.io.FileWriter
+import java.util.Locale
 
 class CSVLogger(private val context: Context) {
 
@@ -26,20 +27,34 @@ class CSVLogger(private val context: Context) {
                     )
                 }
 
-                writer.append(
-                    "${signals.timestamp}," +
-                            "${signals.unlocks}," +
-                            "${signals.microSessions}," +
-                            "${signals.notificationReflex}," +
-                            "${signals.behaviorDrift}," +
-                            "${signals.timePhase}," +
-                            "${signals.voiceDetected}," +
-                            "${signals.proximityDetected}\n"
-                )
+                val behaviorDriftFormatted =
+                    String.format(Locale.US, "%.4f", signals.behaviorDrift)
+
+                val row = buildString {
+                    append(signals.timestamp)
+                    append(',')
+                    append(signals.unlocks)
+                    append(',')
+                    append(signals.microSessions)
+                    append(',')
+                    append(signals.notificationReflex)
+                    append(',')
+                    append(behaviorDriftFormatted)
+                    append(',')
+                    append(signals.timePhase)
+                    append(',')
+                    append(signals.voiceDetected)
+                    append(',')
+                    append(signals.proximityDetected)
+                    append('\n')
+                }
+
+                writer.append(row)
+
+                Log.d("PresenceAI", "CSV row written: $row")
             }
 
         } catch (e: Exception) {
-
             Log.e("PresenceAI", "CSV write failed", e)
         }
     }

@@ -1,8 +1,5 @@
 package com.nophubbing.presenceai.analytics
 
-import android.content.Context
-import java.util.Calendar
-
 data class BehaviorSignals(
     val timestamp: Long,
     val unlocks: Int,
@@ -14,13 +11,14 @@ data class BehaviorSignals(
     val proximityDetected: Int
 )
 
-class SignalAggregator(private val context: Context) {
+class SignalAggregator {
 
     fun generateSignals(
         unlocks: Int,
         microSessions: Int,
         notificationReflex: Int,
         behaviorDrift: Float,
+        timePhase: Int,
         voiceDetected: Int,
         proximityDetected: Int,
         micAllowed: Boolean,
@@ -29,32 +27,21 @@ class SignalAggregator(private val context: Context) {
 
         val timestamp = System.currentTimeMillis()
 
-        val timePhase = computeTimePhase()
+        val voice =
+            if (micAllowed) voiceDetected else -1
 
-        val voice = if (micAllowed) voiceDetected else -1
-        val proximity = if (bluetoothAllowed) proximityDetected else -1
+        val proximity =
+            if (bluetoothAllowed) proximityDetected else -1
 
         return BehaviorSignals(
-            timestamp,
-            unlocks,
-            microSessions,
-            notificationReflex,
-            behaviorDrift,
-            timePhase,
-            voice,
-            proximity
+            timestamp = timestamp,
+            unlocks = unlocks,
+            microSessions = microSessions,
+            notificationReflex = notificationReflex,
+            behaviorDrift = behaviorDrift,
+            timePhase = timePhase,
+            voiceDetected = voice,
+            proximityDetected = proximity
         )
-    }
-
-    private fun computeTimePhase(): Int {
-
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-
-        return when (hour) {
-            in 5..11 -> 0
-            in 12..16 -> 1
-            in 17..21 -> 2
-            else -> 3
-        }
     }
 }
