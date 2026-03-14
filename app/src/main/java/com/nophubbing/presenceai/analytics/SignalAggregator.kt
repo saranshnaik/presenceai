@@ -3,58 +3,55 @@ package com.nophubbing.presenceai.analytics
 import android.content.Context
 import java.util.Calendar
 
-data class BehaviorSignals(
-    val timestamp: Long,
-    val unlocks: Int,
-    val microSessions: Int,
-    val notificationReflex: Int,
-    val behaviorDrift: Float,
-    val timePhase: Int,
-    val voiceDetected: Int,
-    val proximityDetected: Int
-)
-
+/**
+ * SignalAggregator.kt — maps FeatureExtractor.FeatureMetrics → BehaviorSignals.
+ * Produces ALL fields needed by both the 14-feature ML pipeline and the UI.
+ */
 class SignalAggregator(private val context: Context) {
 
-    fun generateSignals(
-        unlocks: Int,
-        microSessions: Int,
-        notificationReflex: Int,
-        behaviorDrift: Float,
-        voiceDetected: Int,
-        proximityDetected: Int,
-        micAllowed: Boolean,
-        bluetoothAllowed: Boolean
-    ): BehaviorSignals {
+    fun generateSignals(features: FeatureExtractor.FeatureMetrics): BehaviorSignals {
+        val cal     = Calendar.getInstance()
+        val hour    = cal.get(Calendar.HOUR_OF_DAY)
+        val isEvening = if (hour >= 18 || hour < 5) 1 else 0
 
-        val timestamp = System.currentTimeMillis()
+        // Baseline values (personalised over time via online learning)
+        val baselineUnlocks = 3.6f
+        // behavior_drift_score: z-score of unlock rate vs baseline
+        val driftScore = (features.unlockCountPerHour - baselineUnlocks) / maxOf(baselineUnlocks, 0.1f)
 
-        val timePhase = computeTimePhase()
-
-        val voice = if (micAllowed) voiceDetected else -1
-        val proximity = if (bluetoothAllowed) proximityDetected else -1
-
+        // pDrift and presenceScore are filled by DashboardViewModel after ML inference.
+        // CSVLogger.updateLastRowLabel() backfills them once the 45s label is resolved.
         return BehaviorSignals(
-            timestamp,
-            unlocks,
-            microSessions,
-            notificationReflex,
-            behaviorDrift,
-            timePhase,
-            voice,
-            proximity
+            hourOfDay               = hour,
+            isEveningSession        = isEvening,
+            baselineUnlocksPerHour  = baselineUnlocks,
+            baselineSessionDurationS = 52.0f,
+            baselineNotifGapS       = 21.1f,
+
+            // Live values for ML
+            unlockCountPerHour      = features.unlockCountPerHour,
+            microSessionRatio       = features.microSessionRatio,
+            notifReflexRatio        = features.notifReflexRatio,
+            behaviorDriftScore      = driftScore,
+            timePhaseRisk           = features.timePhase,
+            voiceActivityDetected   = features.vadEnergy.toInt(),
+            peopleNearbyCount       = if (features.bleSocial > 0f) 1 else 0,
+            vadConfidenceScore      = features.vadEnergy,
+            btSignalStrength        = features.bleSocial,
+
+            // Duration-based fields for the 14-feature vector
+            microSessionDurationS   = features.avgMicroSessionDurationS,
+            notifToUnlockGapS       = features.avgNotifToUnlockGapS,
+
+            // UI display counts
+            unlocks                 = features.unlockCountPerHour.toInt(),
+            totalSessions           = features.totalSessions,
+            microSessions           = features.microSessionCount,
+            notificationReflexCount = features.notifReflexCount,
+
+            // Category breakdown
+            categoryBreakdown       = features.categoryBreakdown,
+            dominantCategory        = features.dominantCategory
         )
-    }
-
-    private fun computeTimePhase(): Int {
-
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-
-        return when (hour) {
-            in 5..11 -> 0
-            in 12..16 -> 1
-            in 17..21 -> 2
-            else -> 3
-        }
     }
 }

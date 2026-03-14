@@ -5,129 +5,133 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
-import android.os.Handler
+import android.os.Build
 import android.os.IBinder
-import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.nophubbing.presenceai.analytics.FeatureExtractor
 import com.nophubbing.presenceai.analytics.SignalAggregator
 import com.nophubbing.presenceai.analytics.SignalRepository
+import com.nophubbing.presenceai.ml.PipelineConfig
 import com.nophubbing.presenceai.storage.CSVLogger
 import com.nophubbing.presenceai.utils.PermissionManager
+import kotlinx.coroutines.*
 
 class MonitoringService : Service() {
 
-//    private val handler = Handler(Looper.getMainLooper())
-    private val voiceMonitor = VoiceMonitor()
-    private val proximityMonitor by lazy { ProximityMonitor(this) }
+    private val config = PipelineConfig()
+    private val scope  = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private lateinit var featureExtractor: FeatureExtractor
-    private lateinit var signalAggregator: SignalAggregator
-    private lateinit var csvLogger: CSVLogger
+    private lateinit var featureExtractor : FeatureExtractor
+    private lateinit var signalAggregator : SignalAggregator
+    private lateinit var voiceMonitor     : VoiceMonitor
+    private lateinit var proximityMonitor : ProximityMonitor
+    private lateinit var csvLogger        : CSVLogger
 
-    private val interval: Long = 60 * 1000   // 1 minute
+    companion object {
+        private const val TAG             = "PresenceAI"
+        private const val CHANNEL_ID      = "presence_monitoring"
+        private const val NOTIFICATION_ID = 1001
+    }
 
-    private var running = true
-
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundServiceNotification()
-        MonitoringState.isRunning = true
-
         featureExtractor = FeatureExtractor(this)
         signalAggregator = SignalAggregator(this)
-        csvLogger = CSVLogger(this)
+        voiceMonitor     = VoiceMonitor(this)
+        proximityMonitor = ProximityMonitor(this)
+        csvLogger        = CSVLogger(this)
 
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildNotification())
 
-//        handler.post(monitorTask)
-    }
-
-    private fun collectAndSaveSignals() {
-
-        val features = featureExtractor.extractFeatures(windowMinutes = 1)
-
-        val unlocks = UnlockCounter.unlockCount
-        val notifications = NotificationCounter.notificationCount
-
-        val micAllowed = PermissionManager.hasMicPermission(this)
-        val bluetoothAllowed = PermissionManager.hasBluetoothPermission(this)
-        val voiceDetected =
-            if (micAllowed) voiceMonitor.detectVoice()
-            else -1
-        val proximityDetected =
-            if (bluetoothAllowed) proximityMonitor.detectProximity()
-            else -1
-
-        val signals = signalAggregator.generateSignals(
-            unlocks = unlocks,
-            microSessions = features.microSessions,
-            notificationReflex = features.notificationReflex,
-            behaviorDrift = 0f,
-            voiceDetected = voiceDetected,
-            proximityDetected = proximityDetected,
-            micAllowed = micAllowed,
-            bluetoothAllowed = bluetoothAllowed
-        )
-        SignalRepository.update(signals)
-
-        csvLogger.logSignals(signals)
-
-        UnlockCounter.unlockCount = 0
-        NotificationCounter.notificationCount = 0
+        MonitoringState.setRunning(true)   // StateFlow → DashboardScreen recomposes
+        Log.d(TAG, "MonitoringService created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-
-        Thread {
-
-            while (running) {
-
-                try {
-                    collectAndSaveSignals()
-                    Thread.sleep(interval)
-
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-
-        }.start()
-
+        startHeartbeat()
         return START_STICKY
     }
 
-    private fun startForegroundServiceNotification() {
-
-        val channelId = "presenceai_monitor"
-
-        val channel = NotificationChannel(
-            channelId,
-            "PresenceAI Monitoring",
-            NotificationManager.IMPORTANCE_LOW
-        )
-
-        val manager =
-            getSystemService(NotificationManager::class.java)
-
-        manager.createNotificationChannel(channel)
-
-        val notification: Notification =
-            NotificationCompat.Builder(this, channelId)
-                .setContentTitle("PresenceAI")
-                .setContentText("Monitoring phone usage patterns")
-                .setSmallIcon(android.R.drawable.ic_menu_info_details)
-                .build()
-
-        startForeground(1, notification)
-    }
-
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
-    }
     override fun onDestroy() {
-        MonitoringState.isRunning = false
-        running = false
+        scope.cancel()
+        MonitoringState.setRunning(false)  // StateFlow → DashboardScreen recomposes
+        Log.d(TAG, "MonitoringService destroyed")
         super.onDestroy()
     }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    // ── Heartbeat ─────────────────────────────────────────────────────────────
+
+    private fun startHeartbeat() {
+        scope.launch {
+            while (isActive) {
+                try { collectAndSaveSignals() }
+                catch (e: Exception) { Log.e(TAG, "Heartbeat error: ${e.message}") }
+                delay(config.heartbeat_interval_ms)
+            }
+        }
+    }
+
+    private fun collectAndSaveSignals() {
+        Log.d(TAG, "Collecting signals...")
+
+        val micAllowed = PermissionManager.hasMicPermission(this)
+        val btAllowed  = PermissionManager.hasBluetoothPermission(this)
+
+        // VAD — -1 if no permission, 0 on detection failure
+        val vadEnergy = try {
+            if (micAllowed) voiceMonitor.detectVoice().coerceAtLeast(0) else -1
+        } catch (e: Exception) { 0 }
+
+        // BLE — -1 if no permission, 0 on scan failure
+        val bleDeviceCount = try {
+            if (btAllowed) proximityMonitor.detectProximity().coerceAtLeast(0) else -1
+        } catch (e: Exception) { 0 }
+
+        // Step 1: set social context on extractor, then extract usage-stats features
+        featureExtractor.currentVadEnergy = vadEnergy.toFloat()
+        featureExtractor.currentBleSocial = bleDeviceCount.toFloat()
+        val features = featureExtractor.extractFeatures(windowMinutes = 10)
+
+        // Step 2: aggregate into BehaviorSignals
+        val signals = signalAggregator.generateSignals(features)
+
+        // Step 3: publish to repository → ViewModel → UI
+        SignalRepository.update(signals)
+
+        // Step 4: persist to CSV for offline training
+        csvLogger.logSignals(signals)
+
+        // Step 5: reset per-tick counters AFTER logging
+        UnlockCounter.unlockCount             = 0
+        NotificationCounter.notificationCount = 0
+
+        Log.d(TAG, "Signals saved — unlocks=${signals.unlocks} vad=$vadEnergy ble=$bleDeviceCount")
+    }
+
+    // ── Notification ──────────────────────────────────────────────────────────
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(
+                CHANNEL_ID,
+                "Presence AI Monitoring",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply { description = "Background attention signal monitoring" }
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
+        }
+    }
+
+    private fun buildNotification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Presence AI")
+            .setContentText("Observing gracefully…")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
 }

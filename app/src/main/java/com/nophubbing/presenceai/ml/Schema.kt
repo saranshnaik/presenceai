@@ -2,102 +2,115 @@ package com.nophubbing.presenceai.ml
 
 import java.util.Date
 
+/**
+ * Schema.kt — Data classes for the 14-feature ML pipeline.
+ */
 val FEATURE_NAMES = listOf(
-    "unlock_freq",           // x1
-    "micro_session_ratio",   // x2
-    "notification_reflex",   // x3
-    "behavior_drift_z",      // x4
-    "time_phase",            // x5
-    "vad_energy",            // x6
-    "ble_social",            // x7
+    "hour_of_day",               // x0
+    "is_evening_session",        // x1
+    "baseline_unlocks_per_hour", // x2
+    "baseline_session_duration_s",// x3
+    "baseline_notif_gap_s",      // x4
+    "unlock_count_per_hour",     // x5
+    "micro_session_duration_s",  // x6
+    "notif_to_unlock_gap_s",     // x7
+    "behavior_drift_score",      // x8
+    "time_phase_risk",           // x9
+    "voice_activity_detected",   // x10
+    "people_nearby_count",       // x11
+    "vad_confidence_score",      // x12
+    "bt_signal_strength"         // x13
 )
 
-val DEFAULT_WEIGHTS = mapOf(
-    "w1" to 0.85,
-    "w2" to 0.60,
-    "w3" to 0.90,
-    "w4" to 0.00,
-    "w5" to 0.70,
-    "w6" to 0.80,
-    "w7" to 0.85,
-    "bias" to -2.50
-)
-
-val TIME_PHASE_TABLE = mapOf(
-    Pair(0, 5) to 0.2,
-    Pair(6, 8) to 0.3,
-    Pair(9, 11) to 0.5,
-    Pair(12, 14) to 0.6,
-    Pair(15, 17) to 0.5,
-    Pair(18, 19) to 0.7,
-    Pair(20, 22) to 0.9,
-    Pair(23, 23) to 0.6
+val DEFAULT_WEIGHTS: List<Double> = listOf(
+    -0.1271, -0.5497, -1.1495, 1.0957, 0.8610, 1.1217, -2.0021,
+    -0.6505, 2.2815, 4.8694, 0.1924, 0.6788, -0.1477, 0.1574
 )
 
 data class SignalRow(
     val timestamp: Long,
-    val unlock_count_10min: Double,
-    val rolling_avg_unlock_rate: Double,
-    val sessions_under_30s: Int,
-    val total_sessions: Int,
-    val last_notif_delta_ms: Long,
-    val current_unlock_rate: Double,
-    val baseline_mean: Double,
-    val baseline_stddev: Double,
-    val baseline_ready: Int,
-    val hour_of_day: Int,
-    val vad_energy: Int,
-    val ble_device_count: Int,
+    val userId: Int = 1,
+    val dayNumber: Int = 1,
+    val hourOfDay: Int,
+    val isEveningSession: Int,
+    val baselineUnlocksPerHour: Double,
+    val baselineSessionDurationS: Double,
+    val baselineNotifGapS: Double,
+    val unlockCountPerHour: Double,
+    val microSessionDurationS: Double,
+    val notifToUnlockGapS: Double,
+    val behaviorDriftScore: Double,
+    val timePhaseRisk: Double,
+    val voiceActivityDetected: Int,
+    val peopleNearbyCount: Int,
+    val vadConfidenceScore: Double,
+    val btSignalStrength: Double,
     val label: Double
 )
 
-data class FeatureVector(
-    val x1: Double,
-    val x2: Double,
-    val x3: Double,
-    val x4: Double,
-    val x5: Double,
-    val x6: Double,
-    val x7: Double
-) {
-    fun asList(): List<Double> {
-        return listOf(x1, x2, x3, x4, x5, x6, x7)
+data class FeatureVector(val features: List<Double>) {
+    init {
+        require(features.size == FEATURE_NAMES.size)
     }
+    fun asList(): List<Double> = features
 }
 
 data class LRWeights(
-    val w1: Double,
-    val w2: Double,
-    val w3: Double,
-    val w4: Double,
-    val w5: Double,
-    val w6: Double,
-    val w7: Double,
+    val w: List<Double>,
     val bias: Double,
-    val update_count: Int,
-    val last_updated: String
+    val update_count: Int = 0,
+    val last_updated: String = ""
 ) {
-    fun asList(): List<Double> {
-        return listOf(w1, w2, w3, w4, w5, w6, w7)
-    }
-
+    fun asList(): List<Double> = w
     companion object {
-        fun defaults(): LRWeights {
-            return LRWeights(
-                w1 = DEFAULT_WEIGHTS["w1"] ?: 0.0,
-                w2 = DEFAULT_WEIGHTS["w2"] ?: 0.0,
-                w3 = DEFAULT_WEIGHTS["w3"] ?: 0.0,
-                w4 = DEFAULT_WEIGHTS["w4"] ?: 0.0,
-                w5 = DEFAULT_WEIGHTS["w5"] ?: 0.0,
-                w6 = DEFAULT_WEIGHTS["w6"] ?: 0.0,
-                w7 = DEFAULT_WEIGHTS["w7"] ?: 0.0,
-                bias = DEFAULT_WEIGHTS["bias"] ?: 0.0,
-                update_count = 0,
-                last_updated = Date().toString()
-            )
-        }
+        fun defaults(): LRWeights = LRWeights(
+            w = DEFAULT_WEIGHTS,
+            bias = -2.50,
+            update_count = 0,
+            last_updated = Date().toString()
+        )
     }
 }
+
+/**
+ * PipelineConfig — single source of truth for all ML constants.
+ */
+data class PipelineConfig(
+    val nudge_threshold: Double = NUDGE_THRESHOLD,
+    val lr_learning_rate: Double = LR_LEARNING_RATE,
+    val vad_multiplier: Double = VAD_MULTIPLIER,
+    val max_nudges_per_day: Int = MAX_NUDGES_PER_DAY,
+    val observation_window_s: Int = OBSERVATION_WINDOW_S,
+    val positive_label_threshold_s: Int = POSITIVE_LABEL_THRESHOLD_S,
+    val re_unlock_window_ms: Long = RE_UNLOCK_WINDOW_MS,
+    val dismiss_threshold_ms: Long = DISMISS_THRESHOLD_MS,
+    val heartbeat_interval_ms: Long = HEARTBEAT_INTERVAL_MS
+) {
+    companion object {
+        const val NUDGE_THRESHOLD = 0.01
+        const val LR_LEARNING_RATE = 0.01
+        const val VAD_MULTIPLIER = 1.15
+        const val MAX_NUDGES_PER_DAY = 8
+        const val OBSERVATION_WINDOW_S = 45
+        const val POSITIVE_LABEL_THRESHOLD_S = 45
+        const val RE_UNLOCK_WINDOW_MS = 60_000L
+        const val DISMISS_THRESHOLD_MS = 3_000L
+        const val HEARTBEAT_INTERVAL_MS = 5_000L
+        
+        const val MIN_TRIALS_PER_ARM = 5
+        const val EPSILON = 0.15f
+        const val BANDIT_FULL_REWARD_S = 45
+        const val BANDIT_PARTIAL_REWARD_S = 20
+    }
+}
+
+data class InferenceResult(
+    val pDrift: Float,
+    val pPhub: Float,
+    val presenceScore: Float,
+    val shouldNudge: Boolean,
+    val timestamp: Long = System.currentTimeMillis()
+)
 
 data class TrainingStep(
     val step: Int,
@@ -107,13 +120,4 @@ data class TrainingStep(
     val label: Double,
     val error: Double?,
     val weights_snapshot: List<Double>
-)
-
-data class PipelineConfig(
-    val nudge_threshold: Double = 0.65,
-    val lr_learning_rate: Double = 0.01,
-    val vad_multiplier: Double = 1.15,
-    val max_nudges_per_day: Int = 8,
-    val random_seed: Int = 42,
-    val log_every_n_steps: Int = 10
 )

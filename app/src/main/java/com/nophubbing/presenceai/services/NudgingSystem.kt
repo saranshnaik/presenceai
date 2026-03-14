@@ -1,5 +1,6 @@
 package com.nophubbing.presenceai.services
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,10 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.nophubbing.presenceai.MainActivity
-import com.nophubbing.presenceai.ml.Schema
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,19 +31,19 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class NudgingSystem(
     private val context    : Context,
-    private val cooldownMs : Long = 5 * 60 * 1_000L   // 5 minutes default; override in tests
+    private val cooldownMs : Long = 15 * 1_000L   // 15 seconds for testing
 ) {
 
     companion object {
         private const val TAG = "NudgingSystem"
 
         // Notification channel
-        const val CHANNEL_ID   = "presence_nudge_channel"
+        const val CHANNEL_ID   = "presence_nudge_v2"
         const val CHANNEL_NAME = "Presence Nudge"
         const val NOTIF_ID     = 1001
 
         // Default phubbing score threshold (0–100); anything >= this triggers a nudge
-        const val DEFAULT_THRESHOLD = 60f
+        const val DEFAULT_THRESHOLD = 1f
     }
 
     // ── Public state ─────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ class NudgingSystem(
 
         Log.d(TAG, "Score=$score threshold=$threshold social=$socialPresent cooledDown=$cooledDown")
 
-        if (score >= threshold && socialPresent && cooledDown) {
+        if (score >= threshold && cooledDown) {
             deliverNudge(score)
             lastNudgeTime = now
         }
@@ -116,6 +117,7 @@ class NudgingSystem(
 
     // ── Notification helpers ──────────────────────────────────────────────────
 
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun deliverNudge(score: Float) {
         _nudgeFired.value = true
         Log.d(TAG, "Delivering nudge for score=$score")
@@ -133,16 +135,18 @@ class NudgingSystem(
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)   // replace with your app icon
-            .setContentTitle("📱 $label")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("📱 $label — Is this correct?")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            // Action buttons: user feedback feeds back into the ML model
-            .addAction(buildAction("✅ I was phubbing",  NudgeFeedbackReceiver.ACTION_ACCEPT, score))
-            .addAction(buildAction("❌ False alarm",      NudgeFeedbackReceiver.ACTION_DISMISS, score))
+            // Action buttons: user feedback triggers 20s observer → online learning
+            .addAction(buildAction("✅ Yes, I was phubbing",  NudgeFeedbackReceiver.ACTION_ACCEPT, score))
+            .addAction(buildAction("❌ No, false alarm",       NudgeFeedbackReceiver.ACTION_DISMISS, score))
             .build()
 
         try {
@@ -189,8 +193,8 @@ class NudgingSystem(
     }
 
     private fun buildNudgeMessage(score: Float): String = when {
-        score >= 85 -> "You've been on your phone a lot. The people around you might appreciate your attention 🙏"
-        score >= 70 -> "Heads up — you seem a bit distracted. Take a breath and reconnect 😊"
-        else        -> "Small distraction detected. You're doing great, just a gentle reminder 👋"
+        score >= 85 -> "We detected heavy phone usage nearby others. Were you phubbing? Tap to confirm 🙏"
+        score >= 70 -> "Looks like you might be distracted. Is this accurate? 😊"
+        else        -> "Possible phone distraction detected. Let us know if this is right 👋"
     }
 }
