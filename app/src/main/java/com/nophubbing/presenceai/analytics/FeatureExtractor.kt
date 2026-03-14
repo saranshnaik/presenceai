@@ -14,10 +14,16 @@ class FeatureExtractor(private val context: Context) {
     )
 
     data class FeatureMetrics(
-        val sessionCount: Int,
-        val avgDuration: Long,
-        val microSessions: Int,
-        val notificationReflex: Int
+        val unlock_freq: Float,
+        val micro_session: Float,
+        val notification_reflex: Float,
+        val behavior_drift_z: Float,
+        val time_phase: Float,
+        val vad_energy: Float,
+        val ble_social: Float,
+        val total_sessions: Int = 0,
+        val micro_sessions_count: Int = 0,
+        val notification_reflex_count: Int = 0
     )
 
     fun extractFeatures(windowMinutes: Int = 30): FeatureMetrics {
@@ -35,10 +41,16 @@ class FeatureExtractor(private val context: Context) {
 
         var currentPackage: String? = null
         var sessionStart = 0L
+        var unlocks = 0
 
         while (events.hasNextEvent()) {
 
             events.getNextEvent(event)
+
+            // API 28+ KEYGUARD_HIDDEN (18) represents a screen unlock
+            if (event.eventType == 18) {
+                unlocks++
+            }
 
             if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
 
@@ -79,13 +91,32 @@ class FeatureExtractor(private val context: Context) {
             }
         }
 
-        return computeMetrics(sessions)
+        return computeMetrics(sessions, unlocks)
     }
 
-    private fun computeMetrics(rawSessions: List<Session>): FeatureMetrics {
+    private fun computeMetrics(rawSessions: List<Session>, unlocks: Int): FeatureMetrics {
+
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val timePhase = when (hour) {
+            in 5..11 -> 0.2f
+            in 12..16 -> 0.5f
+            in 17..21 -> 0.8f
+            else -> 0.1f
+        }
 
         if (rawSessions.isEmpty()) {
-            return FeatureMetrics(0, 0, 0, 0)
+            return FeatureMetrics(
+                unlock_freq = unlocks.toFloat(),
+                micro_session = 0f,
+                notification_reflex = 0f,
+                behavior_drift_z = 0f,
+                time_phase = timePhase,
+                vad_energy = 0f,
+                ble_social = 0f,
+                total_sessions = 0,
+                micro_sessions_count = 0,
+                notification_reflex_count = 0
+            )
         }
 
         val mergedSessions = mutableListOf<Session>()
@@ -137,20 +168,27 @@ class FeatureExtractor(private val context: Context) {
 
         val sessionCount = mergedSessions.size
 
-        val avgDuration =
-            if (sessionCount > 0) totalDuration / sessionCount else 0
+        val microSessionRatio = if (sessionCount > 0) microSessions.toFloat() / sessionCount.toFloat() else 0f
+        val notifReflexRatio = if (sessionCount > 0) notificationReflex.toFloat() / sessionCount.toFloat() else 0f
 
         Log.d("PresenceAI", "-------------")
         Log.d("PresenceAI", "Sessions: $sessionCount")
-        Log.d("PresenceAI", "Avg Duration(ms): $avgDuration")
-        Log.d("PresenceAI", "Micro Sessions (<20s): $microSessions")
-        Log.d("PresenceAI", "Notification Reflex (<5s): $notificationReflex")
+        Log.d("PresenceAI", "Unlocks (x1): $unlocks")
+        Log.d("PresenceAI", "Micro Session Ratio (x2): $microSessionRatio")
+        Log.d("PresenceAI", "Notification Reflex Ratio (x3): $notifReflexRatio")
+        Log.d("PresenceAI", "Time Phase (x5): $timePhase")
 
         return FeatureMetrics(
-            sessionCount = sessionCount,
-            avgDuration = avgDuration,
-            microSessions = microSessions,
-            notificationReflex = notificationReflex
+            unlock_freq = unlocks.toFloat(),
+            micro_session = microSessionRatio,
+            notification_reflex = notifReflexRatio,
+            behavior_drift_z = 0f,   // Feature x4 placeholder
+            time_phase = timePhase,
+            vad_energy = 0f,         // Feature x6 placeholder
+            ble_social = 0f,          // Feature x7 placeholder
+            total_sessions = sessionCount,
+            micro_sessions_count = microSessions,
+            notification_reflex_count = notificationReflex
         )
     }
 

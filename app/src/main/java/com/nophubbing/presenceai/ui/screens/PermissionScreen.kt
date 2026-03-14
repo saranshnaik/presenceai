@@ -2,6 +2,7 @@ package com.nophubbing.presenceai.ui.screens
 
 import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,8 +20,8 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
 
     val context = LocalContext.current
 
-    var micEnabled by remember { mutableStateOf(false) }
-    var btEnabled by remember { mutableStateOf(false) }
+    var micEnabled by remember { mutableStateOf(PermissionManager.hasMicPermission(context)) }
+    var btEnabled by remember { mutableStateOf(PermissionManager.hasBluetoothPermission(context)) }
 
     val micPermissionLauncher =
         rememberLauncherForActivityResult(
@@ -31,9 +32,9 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
 
     val bluetoothPermissionLauncher =
         rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            btEnabled = granted
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            btEnabled = permissions.values.all { it }
         }
 
     Column(
@@ -94,9 +95,20 @@ fun PermissionScreen(onStartClicked: () -> Unit) {
                 required = false,
                 enabled = btEnabled,
                 onToggle = {
-                    bluetoothPermissionLauncher.launch(
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        bluetoothPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.BLUETOOTH_SCAN,
+                                Manifest.permission.BLUETOOTH_CONNECT
+                            )
+                        )
+                    } else {
+                        bluetoothPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION
+                            )
+                        )
+                    }
                 }
             )
         }

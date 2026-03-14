@@ -6,21 +6,26 @@ import android.content.Intent
 import android.util.Log
 
 object UnlockCounter {
-    var unlockCount = 0
+    private val unlockTimestamps = mutableListOf<Long>()
+
+    @Synchronized
+    fun increment() {
+        unlockTimestamps.add(System.currentTimeMillis())
+    }
+
+    @Synchronized
+    fun getCount(windowMinutes: Int): Int {
+        val cutoff = System.currentTimeMillis() - (windowMinutes * 60 * 1000L)
+        unlockTimestamps.removeAll { it < cutoff }
+        return unlockTimestamps.size
+    }
 }
 
 class UnlockReceiver : BroadcastReceiver() {
-
     override fun onReceive(context: Context?, intent: Intent?) {
-
         if (intent?.action == Intent.ACTION_USER_PRESENT) {
-
-            UnlockCounter.unlockCount++
-
-            Log.d(
-                "PresenceAI",
-                "Unlock detected. Count = ${UnlockCounter.unlockCount}"
-            )
+            UnlockCounter.increment()
+            Log.d("PresenceAI", "Unlock detected. Current window count: ${UnlockCounter.getCount(10)}")
         }
     }
 }

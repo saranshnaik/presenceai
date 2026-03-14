@@ -32,7 +32,7 @@ object OnlineLearner {
      */
     fun update(features: List<Double>, label: Double, weights: LRWeights, config: PipelineConfig): LRWeights {
         if (label == -1.0) {
-            return weights // Return the same object, no updates
+            return weights // Unlabeled — skip update
         }
 
         if (label != 0.0 && label != 1.0) {
@@ -43,23 +43,14 @@ object OnlineLearner {
         val error = label - pDrift
         val lr = config.lr_learning_rate
 
-        val oldW = weights.asList()
-        val newWeights = oldW.mapIndexed { index, w ->
-            w + lr * error * features[index]
-        }
+        val newW = weights.asList().mapIndexed { i, w -> w + lr * error * features[i] }
         val newBias = weights.bias + lr * error
 
         return LRWeights(
-            w1 = newWeights[0],
-            w2 = newWeights[1],
-            w3 = newWeights[2],
-            w4 = newWeights[3],
-            w5 = newWeights[4],
-            w6 = newWeights[5],
-            w7 = newWeights[6],
+            w = newW,
             bias = newBias,
             update_count = weights.update_count + 1,
-            last_updated = Date().toString()
+            last_updated = java.util.Date().toString()
         )
     }
 

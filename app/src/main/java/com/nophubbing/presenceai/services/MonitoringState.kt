@@ -1,7 +1,7 @@
 package com.nophubbing.presenceai.services
 
+import kotlinx.coroutines.flow.MutableStateFlow
+
 object MonitoringState {
-
-    var isRunning: Boolean = false
-
+    val isRunning = MutableStateFlow(false)
 }

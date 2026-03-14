@@ -5,72 +5,41 @@ import kotlin.math.min
 
 object FeatureEngineering {
 
-    fun computeX1UnlockFreq(unlockCount10Min: Double, rollingAvg: Double): Double {
-        val denom = if (rollingAvg >= 0.1) rollingAvg else 3.0
-        val v = unlockCount10Min / denom
-        return max(0.0, min(v, 4.0))
-    }
-
-    fun computeX2MicroSessionRatio(sessionsUnder30s: Int, totalSessions: Int): Double {
-        if (totalSessions == 0) return 0.0
-        val v = sessionsUnder30s.toDouble() / totalSessions.toDouble()
-        return max(0.0, min(v, 1.0))
-    }
-
-    fun computeX3NotificationReflex(lastNotifDeltaMs: Long): Double {
-        return if (lastNotifDeltaMs in 1..5000) 1.0 else 0.0
-    }
-
-    fun computeX4BehaviorDrift(
-        currentUnlockRate: Double,
-        baselineMean: Double,
-        baselineStdDev: Double,
-        baselineReady: Int
-    ): Double {
-        if (baselineReady == 0 || baselineStdDev < 0.1) return 0.0
-        val v = (currentUnlockRate - baselineMean) / baselineStdDev
-        return max(-3.0, min(v, 3.0))
-    }
-
-    fun computeX5TimePhase(hourOfDay: Int): Double {
-        if (hourOfDay !in 0..23) return 0.4
-        for ((range, multiplier) in TIME_PHASE_TABLE) {
-            if (hourOfDay in range.first..range.second) {
-                return multiplier
-            }
-        }
-        return 0.4
-    }
-
-    fun computeX6VadEnergy(vadEnergy: Int): Double {
-        return if (vadEnergy == 1) 1.0 else 0.0
-    }
-
-    fun computeX7BleSocial(bleDeviceCount: Int): Double {
-        return if (bleDeviceCount >= 1) 1.0 else 0.0
-    }
-
+    /**
+     * Directly map from SignalRow to a 14-element feature vector
+     * aligned to the FEATURE_NAMES list in Schema.kt:
+     *   hour_of_day, is_evening_session, baseline_unlocks_per_hour,
+     *   baseline_session_duration_s, baseline_notif_gap_s, unlock_count_per_hour,
+     *   micro_session_duration_s, notif_to_unlock_gap_s, behavior_drift_score,
+     *   time_phase_risk, voice_activity_detected, people_nearby_count,
+     *   vad_confidence_score, bt_signal_strength
+     */
     fun buildFeatureVector(row: SignalRow): FeatureVector {
-        val x1 = computeX1UnlockFreq(row.unlock_count_10min, row.rolling_avg_unlock_rate)
-        val x2 = computeX2MicroSessionRatio(row.sessions_under_30s, row.total_sessions)
-        val x3 = computeX3NotificationReflex(row.last_notif_delta_ms)
-        val x4 = computeX4BehaviorDrift(
-            row.current_unlock_rate,
-            row.baseline_mean,
-            row.baseline_stddev,
-            row.baseline_ready
+        val rawFeatures = listOf(
+            row.hourOfDay.toDouble().coerce(0.0, 23.0) / 23.0,            // normalized hour
+            row.isEveningSession.toDouble(),                               // 0 or 1
+            row.baselineUnlocksPerHour.coerce(0.0, 30.0) / 30.0,         // normalized baseline
+            row.baselineSessionDurationS.coerce(0.0, 300.0) / 300.0,     // normalized session dur
+            row.baselineNotifGapS.coerce(0.0, 120.0) / 120.0,            // normalized notif gap
+            row.unlockCountPerHour.coerce(0.0, 30.0) / 30.0,             // normalized unlock count
+            row.microSessionDurationS.coerce(0.0, 60.0) / 60.0,          // normalized micro session
+            row.notifToUnlockGapS.coerce(0.0, 60.0) / 60.0,              // normalized notif->unlock
+            row.behaviorDriftScore.coerce(-3.0, 3.0) / 3.0,              // normalized drift
+            row.timePhaseRisk.coerce(0.0, 1.0),                           // already in [0,1]
+            if (row.voiceActivityDetected == 1) 1.0 else 0.0,             // hardcoded 0
+            if (row.peopleNearbyCount > 0) 1.0 else 0.0,                  // hardcoded 0
+            row.vadConfidenceScore.coerce(0.0, 1.0),                      // hardcoded 0.0
+            row.btSignalStrength.coerce(0.0, 1.0)                         // hardcoded 0.0
         )
-        val x5 = computeX5TimePhase(row.hour_of_day)
-        val x6 = computeX6VadEnergy(row.vad_energy)
-        val x7 = computeX7BleSocial(row.ble_device_count)
 
-        val features = listOf(x1, x2, x3, x4, x5, x6, x7)
-        for (f in features) {
+        for ((i, f) in rawFeatures.withIndex()) {
             if (f.isNaN() || f.isInfinite()) {
-                throw IllegalArgumentException("Feature is NaN or Inf")
+                throw IllegalArgumentException("Feature[$i] = $f is NaN or Inf")
             }
         }
 
-        return FeatureVector(x1, x2, x3, x4, x5, x6, x7)
+        return FeatureVector(rawFeatures)
     }
+
+    private fun Double.coerce(min: Double, max: Double) = kotlin.math.max(min, kotlin.math.min(this, max))
 }
