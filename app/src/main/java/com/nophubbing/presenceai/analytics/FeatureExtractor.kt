@@ -117,11 +117,6 @@ class FeatureExtractor(private val context: Context) {
             )
         }
 
-        Log.d(
-            "PresenceAI",
-            "FeatureExtractor.computeMetrics called with ${rawSessions.size} raw sessions, lastNotificationTime=${NotificationTracker.lastNotificationTime}"
-        )
-
         val mergedSessions = mutableListOf<Session>()
         var current = rawSessions[0]
 
@@ -164,26 +159,7 @@ class FeatureExtractor(private val context: Context) {
             val reactionDelay = s.startTime - NotificationTracker.lastNotificationTime
             if (reactionDelay in 0..5000) {
                 notificationReflex++
-                Log.d(
-                    "PresenceAI",
-                    "Notification reflex detected for session index=$i, pkg=${s.packageName}, reactionDelay=$reactionDelay, notificationReflex=$notificationReflex"
-                )
-            } else {
-                Log.d(
-                    "PresenceAI",
-                    "Session index=$i did NOT count as notification reflex. pkg=${s.packageName}, reactionDelay=$reactionDelay, lastNotificationTime=${NotificationTracker.lastNotificationTime}"
-                )
             }
-
-            // #region agent log
-            try {
-                val logEntry = """
-{"sessionId":"86e374","runId":"pre-fix","hypothesisId":"H1","location":"FeatureExtractor.kt:146","message":"session_metrics","data":{"index":$i,"packageName":"${s.packageName}","startTime":${s.startTime},"endTime":${s.endTime},"duration":$duration,"gap":$gap,"lastNotificationTime":${NotificationTracker.lastNotificationTime},"reactionDelay":$reactionDelay,"isMicro":${duration < 15000 && gap < 60000},"notificationReflexCount":$notificationReflex},"timestamp":${System.currentTimeMillis()}}
-""".trimIndent()
-                java.io.File("debug-86e374.log").appendText(logEntry + "\n")
-            } catch (_: Exception) {
-            }
-            // #endregion
 
             previousEnd = s.endTime
 
@@ -195,11 +171,6 @@ class FeatureExtractor(private val context: Context) {
 
         val behaviorDrift =
             computeBehaviorDrift(microSessions, mergedSessions.size)
-
-        Log.d("PresenceAI", "-------------")
-        Log.d("PresenceAI", "Micro Sessions (<15s + rapid reopen): $microSessions")
-        Log.d("PresenceAI", "Notification Reflex (notif -> open within 5s): $notificationReflex")
-        Log.d("PresenceAI", "Behavior Drift: $behaviorDrift")
 
         return FeatureMetrics(
             microSessions = microSessions,

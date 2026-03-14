@@ -21,15 +21,11 @@ class UnlockReceiver : BroadcastReceiver() {
             Intent.ACTION_SCREEN_OFF -> {
 
                 screenOffTime = System.currentTimeMillis()
-
-                Log.d("PresenceAI", "DETECTED_SCREEN_OFF at $screenOffTime")
             }
 
             Intent.ACTION_SCREEN_ON -> {
 
                 screenOnTime = System.currentTimeMillis()
-
-                Log.d("PresenceAI", "DETECTED_SCREEN_ON at $screenOnTime")
             }
 
             Intent.ACTION_USER_PRESENT -> {
@@ -47,15 +43,6 @@ class UnlockReceiver : BroadcastReceiver() {
 
                     UnlockCounter.unlockCount++
 
-                    Log.d(
-                        "PresenceAI",
-                        "DETECTED_UNLOCK_BROADCAST via USER_PRESENT. Count=${UnlockCounter.unlockCount}, timeSinceScreenOn=$timeSinceScreenOn"
-                    )
-                } else {
-                    Log.d(
-                        "PresenceAI",
-                        "USER_PRESENT received but did NOT count as unlock (UNLOCK_BROADCAST_IGNORED). screenOnTime=$screenOnTime, screenOffTime=$screenOffTime, timeSinceScreenOn=$timeSinceScreenOn"
-                    )
                 }
             }
         }

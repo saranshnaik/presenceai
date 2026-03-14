@@ -13,27 +13,9 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
 
-        Log.d(
-            "PresenceAI",
-            "DETECTED_NOTIFICATION_LISTENER for ${sbn.packageName}, current lastNotificationTime=${NotificationTracker.lastNotificationTime}"
-        )
-
         NotificationCounter.notificationCount++
         NotificationTracker.lastNotificationTime = System.currentTimeMillis()
 
-        // #region agent log
-        try {
-            val logEntry = """
-{"sessionId":"86e374","runId":"pre-fix","hypothesisId":"H1","location":"NotificationListener.kt:15","message":"notification_posted","data":{"packageName":"${sbn.packageName}","notificationCount":${NotificationCounter.notificationCount},"lastNotificationTime":${NotificationTracker.lastNotificationTime}},"timestamp":${System.currentTimeMillis()}}
-""".trimIndent()
-            java.io.File("debug-86e374.log").appendText(logEntry + "\n")
-        } catch (_: Exception) {
-        }
-        // #endregion
-
-        Log.d(
-            "PresenceAI",
-            "Notification received from ${sbn.packageName}, updated lastNotificationTime=${NotificationTracker.lastNotificationTime}, totalNotifications=${NotificationCounter.notificationCount}"
-        )
+        Log.d("PresenceAI", "Notification received from ${sbn.packageName}")
     }
 }

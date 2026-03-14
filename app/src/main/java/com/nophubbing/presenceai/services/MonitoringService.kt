@@ -16,7 +16,7 @@ import com.nophubbing.presenceai.utils.PermissionManager
 
 class MonitoringService : Service() {
 
-    private val voiceMonitor = VoiceMonitor()
+    private val voiceMonitor by lazy { VoiceMonitor(this) }
     private val proximityMonitor by lazy { ProximityMonitor(this) }
 
     private lateinit var featureExtractor: FeatureExtractor
@@ -44,11 +44,6 @@ class MonitoringService : Service() {
 
     private fun collectAndSaveSignals() {
 
-        Log.d(
-            "PresenceAI",
-            "collectAndSaveSignals: usageAccess=${PermissionManager.hasUsageStatsPermission(this)} notifLast=${com.nophubbing.presenceai.analytics.NotificationTracker.lastNotificationTime} broadcastUnlocks=${UnlockCounter.unlockCount}"
-        )
-
         val features = featureExtractor.extractFeatures(windowMinutes = 1)
 
         val unlocksFromBroadcast = UnlockCounter.unlockCount
@@ -60,11 +55,6 @@ class MonitoringService : Service() {
         }
         val unlocks = unlocksFromBroadcast + unlocksFromUsage
 
-        Log.d(
-            "PresenceAI",
-            "Unlocks this interval: broadcast=$unlocksFromBroadcast, usageStats=$unlocksFromUsage, total=$unlocks"
-        )
-
         val micAllowed = PermissionManager.hasMicPermission(this)
         val bluetoothAllowed = PermissionManager.hasBluetoothPermission(this)
 
@@ -75,11 +65,6 @@ class MonitoringService : Service() {
         val proximityDetected =
             if (bluetoothAllowed) proximityMonitor.detectProximity()
             else -1
-
-        Log.d(
-            "PresenceAI",
-            "SENSOR_RESULTS micAllowed=$micAllowed bluetoothAllowed=$bluetoothAllowed voiceDetected=$voiceDetected proximityDetected=$proximityDetected"
-        )
 
         val signals = signalAggregator.generateSignals(
             unlocks = unlocks,

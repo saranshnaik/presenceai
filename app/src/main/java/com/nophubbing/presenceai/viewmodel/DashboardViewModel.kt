@@ -4,8 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nophubbing.presenceai.analytics.BehaviorSignals
-import com.nophubbing.presenceai.storage.CSVReader
-import kotlinx.coroutines.delay
+import com.nophubbing.presenceai.analytics.SignalRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -21,29 +20,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private var lastTimestamp: Long = -1L
 
     init {
-        startMonitoring()
-    }
-
-    private fun startMonitoring() {
-
         viewModelScope.launch {
 
-            while (true) {
+            SignalRepository.latestSignals.collect { latest ->
 
-                try {
+                if (latest != null && latest.timestamp != lastTimestamp) {
 
-                    val latest =
-                        CSVReader.readLatestSignals(getApplication())
-
-                    if (latest != null && latest.timestamp != lastTimestamp) {
-
-                        lastTimestamp = latest.timestamp
-                        _signals.value = latest
-                    }
-
-                } catch (_: Exception) {}
-
-                delay(3000)
+                    lastTimestamp = latest.timestamp
+                    _signals.value = latest
+                }
             }
         }
     }

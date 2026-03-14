@@ -22,8 +22,6 @@ class UnlockDetector(private val context: Context) {
 
         var unlocks = 0
 
-        Log.d("PresenceAI", "UnlockDetector.getUnlockCount from $lastCheckTime to $now")
-
         while (events.hasNextEvent()) {
 
             events.getNextEvent(event)
@@ -33,18 +31,12 @@ class UnlockDetector(private val context: Context) {
                 UsageEvents.Event.KEYGUARD_HIDDEN -> {
 
                     unlocks++
-                    Log.d("PresenceAI", "DETECTED_UNLOCK_USAGE via KEYGUARD_HIDDEN at ${event.timeStamp}")
                 }
 
                 UsageEvents.Event.MOVE_TO_FOREGROUND -> {
 
                     if (!isSystemPackage(event.packageName)) {
-
-                        // Do NOT treat foreground app starts as unlocks; log only for debugging.
-                        Log.d(
-                            "PresenceAI",
-                            "FOREGROUND_APP_EVENT (not counted as unlock): ${event.packageName} at ${event.timeStamp}"
-                        )
+                        // Do not treat foreground app starts as unlocks.
                     }
                 }
             }
