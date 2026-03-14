@@ -25,8 +25,10 @@ import kotlin.math.exp
 object LrClassifier {
 
     /** Scale applied when no social presence confirmed (BT/VAD not granted or no device found) */
-    private const val SOCIAL_ABSENT_SCALE = 0.7
+    // private const val SOCIAL_ABSENT_SCALE = 0.7
 
+    /* 
+    // ML logic commented out as requested to use Rule-Based detection instead
     fun sigmoid(x: Double): Double {
         val clamped = x.coerceIn(-500.0, 500.0)
         return 1.0 / (1.0 + exp(-clamped))
@@ -38,35 +40,33 @@ object LrClassifier {
         }
         var result = 0.0
         for (i in features.indices) {
-            require(!features[i].isNaN() && !weights[i].isNaN()) { "NaN at index $i" }
             result += features[i] * weights[i]
         }
         return result
     }
 
-    /** P(drift) = sigmoid(w·x + b) */
     fun predict(features: List<Double>, weights: LRWeights): Double {
         val z = dotProduct(features, weights.asList()) + weights.bias
         return sigmoid(z)
     }
+    */
 
     /**
-     * P(phub) — behavioral probability scaled by social context availability.
-     *
-     * x10 = voice_activity_detected (index 10)
-     * x11 = people_nearby_count     (index 11)
-     *
-     * Social context present  → full P(drift)
-     * Social context absent   → P(drift) * 0.7 (still visible, won't nudge alone)
+     * P(phub) — Now using Rule-Based Heuristics ("Damn Perfect" Mode)
      */
     fun computePPhub(features: List<Double>, weights: LRWeights, config: PipelineConfig): Double {
-        val pDrift = predict(features, weights)
-        val socialPresent = features[10] > 0.0 || features[11] > 0.0  // VAD or BLE
-        val scale = if (socialPresent) 1.0 else SOCIAL_ABSENT_SCALE
-        return (pDrift * scale).coerceIn(0.0, 1.0)
+        return RuleBasedClassifier.computePPhub(features)
     }
 
     fun shouldNudge(features: List<Double>, weights: LRWeights, config: PipelineConfig): Boolean {
-        return computePPhub(features, weights, config) > config.nudge_threshold
+        val pPhub = computePPhub(features, weights, config)
+        return RuleBasedClassifier.shouldNudge(pPhub, config.nudge_threshold)
+    }
+
+    /** 
+     * predict() maps to pDrift in heuristic mode.
+     */
+    fun predict(features: List<Double>, weights: LRWeights): Double {
+        return RuleBasedClassifier.computePDrift(features)
     }
 }

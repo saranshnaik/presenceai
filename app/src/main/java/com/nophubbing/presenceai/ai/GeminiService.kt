@@ -1,0 +1,53 @@
+package com.nophubbing.presenceai.ai
+
+import android.util.Log
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.content
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * GeminiService — Handles interaction with the Google Gemini Pro model for generating
+ * behavioral insights based on presence and usage data.
+ */
+object GeminiService {
+
+    // IMPORTANT: User needs to provide their API key
+    private const val API_KEY = ""
+    private const val MODEL_NAME = "gemini-2.5-flash"
+
+    private val model by lazy {
+        GenerativeModel(
+            modelName = MODEL_NAME,
+            apiKey = API_KEY
+        )
+    }
+
+    suspend fun generateInsights(summaryData: String): String = withContext(Dispatchers.IO) {
+        if (API_KEY == "YOUR_GEMINI_API_KEY_HERE") {
+            return@withContext "API Key missing. Please provide a valid Gemini API key in GeminiService.kt."
+        }
+
+        val prompt = """
+            You are "Presence AI", a mindful behavioral coach. 
+            Analyze the following device usage data summary and provide 3-4 concise, helpful insights.
+            Focus on trends like phubbing risk, session intensity, and presence score improvements.
+            Be encouraging but direct about areas needing attention.
+            
+            USER DATA SUMMARY:
+            $summaryData
+            
+            Format the output with clear bullet points. Keep it under 150 words.
+        """.trimIndent()
+
+        try {
+            val response = model.generateContent(
+                content { text(prompt) }
+            )
+            response.text ?: "AI could not generate insights at this time."
+        } catch (e: Exception) {
+            Log.e("GeminiService", "Error generating insights", e)
+            "Error connecting to Gemini API: ${e.message}"
+        }
+    }
+}

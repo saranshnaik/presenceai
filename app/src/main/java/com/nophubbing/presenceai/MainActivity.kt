@@ -38,20 +38,35 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        requestAllPermissions()
+        
         // Auto-start monitoring service
         startForegroundService(Intent(this, MonitoringService::class.java))
-        requestNotificationPermission()
     }
 
-    private fun requestNotificationPermission() {
+    private fun requestAllPermissions() {
+        val permissions = mutableListOf<String>()
+        
+        permissions.add(android.Manifest.permission.RECORD_AUDIO)
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            permissions.add(android.Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            permissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
-            }
+            permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        val toRequest = permissions.filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(this, it) != 
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
+        if (toRequest.isNotEmpty()) {
+            requestPermissions(toRequest.toTypedArray(), 101)
         }
     }
 

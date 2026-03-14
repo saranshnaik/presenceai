@@ -32,7 +32,8 @@ class PipelineRunner(private val config: PipelineConfig) {
         var error: Double? = null
         if (row.label != -1.0) {
             error = row.label - pDrift
-            weights = OnlineLearner.update(fv, row.label, weights, config)
+            // Online Learning disabled in Heuristic Mode
+            // weights = OnlineLearner.update(fv, row.label, weights, config)
             labeledCount++
         }
 

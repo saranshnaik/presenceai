@@ -83,19 +83,19 @@ class MonitoringService : Service() {
         val micAllowed = PermissionManager.hasMicPermission(this)
         val btAllowed  = PermissionManager.hasBluetoothPermission(this)
 
-        // VAD — -1 if no permission, 0 on detection failure
+        // VAD — 0f if no permission or failure
         val vadEnergy = try {
-            if (micAllowed) voiceMonitor.detectVoice().coerceAtLeast(0) else -1
-        } catch (e: Exception) { 0 }
+            if (micAllowed) voiceMonitor.detectVoice() else 0f
+        } catch (e: Exception) { 0f }
 
-        // BLE — -1 if no permission, 0 on scan failure
-        val bleDeviceCount = try {
-            if (btAllowed) proximityMonitor.detectProximity().coerceAtLeast(0) else -1
-        } catch (e: Exception) { 0 }
+        // BLE — -100f if no permission or failure
+        val bleRssi = try {
+            if (btAllowed) proximityMonitor.detectProximity() else -100f
+        } catch (e: Exception) { -100f }
 
         // Step 1: set social context on extractor, then extract usage-stats features
-        featureExtractor.currentVadEnergy = vadEnergy.toFloat()
-        featureExtractor.currentBleSocial = bleDeviceCount.toFloat()
+        featureExtractor.currentVadEnergy = vadEnergy
+        featureExtractor.currentBleSocial = bleRssi
         val features = featureExtractor.extractFeatures(windowMinutes = 10)
 
         // Step 2: aggregate into BehaviorSignals
@@ -111,7 +111,7 @@ class MonitoringService : Service() {
         UnlockCounter.unlockCount             = 0
         NotificationCounter.notificationCount = 0
 
-        Log.d(TAG, "Signals saved — unlocks=${signals.unlocks} vad=$vadEnergy ble=$bleDeviceCount")
+        Log.d(TAG, "Signals saved — unlocks=${signals.unlocks} vad=$vadEnergy ble=$bleRssi")
     }
 
     // ── Notification ──────────────────────────────────────────────────────────

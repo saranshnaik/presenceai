@@ -1,0 +1,161 @@
+﻿> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+
+> Task :app:compileDebugKotlin FAILED
+./gradlew : e: file:///C:/U
+sers/Apurav/AndroidStudioPr
+ojects/PresenceAI/app/src/m
+ain/java/com/nophubbing/pre
+senceai/services/FalseNegat
+iveGuard.kt:133:39 
+Overload resolution 
+ambiguity between 
+candidates:
+At line:1 char:1
++ ./gradlew assembleDebug 
+--console=plain > 
+build_error.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (e:   
+  file:///C:/U...een can   
+ didates::String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> 
+BigDecimal): BigDecimal
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> 
+BigInteger): BigInteger
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> Double): 
+Double
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> Int): Int
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> Long): Long
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> UInt): UInt
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> ULong): 
+ULong
+e: file:///C:/Users/Apurav/
+AndroidStudioProjects/Prese
+nceAI/app/src/main/java/com
+/nophubbing/presenceai/serv
+ices/FalseNegativeGuard.kt:
+134:39 Overload resolution 
+ambiguity between 
+candidates:
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> 
+BigDecimal): BigDecimal
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> 
+BigInteger): BigInteger
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> Double): 
+Double
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> Int): Int
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> Long): Long
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> UInt): UInt
+fun <T> Iterable<T>.sumOf(s
+elector: (T) -> ULong): 
+ULong
+e: file:///C:/Users/Apurav/
+AndroidStudioProjects/Prese
+nceAI/app/src/main/java/com
+/nophubbing/presenceai/serv
+ices/FalseNegativeGuard.kt:
+139:27 'operator' modifier 
+is required on 
+'FirNamedFunctionSymbol 
+kotlin/compareTo' in 
+'compareTo'.
+e: file:///C:/Users/Apurav/
+AndroidStudioProjects/Prese
+nceAI/app/src/main/java/com
+/nophubbing/presenceai/serv
+ices/FalseNegativeGuard.kt:
+140:27 'operator' modifier 
+is required on 
+'FirNamedFunctionSymbol 
+kotlin/compareTo' in 
+'compareTo'.
+e: file:///C:/Users/Apurav/
+AndroidStudioProjects/Prese
+nceAI/app/src/main/java/com
+/nophubbing/presenceai/ui/s
+creens/DashboardScreen.kt:2
+26:55 Argument type 
+mismatch: actual type is 
+'kotlin.Float', but 
+'kotlin.Int' was expected.
+
+FAILURE: Build failed with 
+an exception.
+
+* What went wrong:
+Execution failed for task 
+':app:compileDebugKotlin'.
+> A failure occurred while 
+executing org.jetbrains.kot
+lin.compilerRunner.GradleCo
+mpilerRunnerWithWorkers$Gra
+dleKotlinCompilerWorkAction
+   > Compilation error. 
+See log for more details
+
+* Try:
+> Run with --stacktrace 
+option to get the stack 
+trace.
+> Run with --info or 
+--debug option to get more 
+log output.
+> Run with --scan to get 
+full insights.
+> Get more help at 
+https://help.gradle.org.
+
+BUILD FAILED in 10s
+28 actionable tasks: 1 executed, 27 up-to-date

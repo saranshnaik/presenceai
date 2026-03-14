@@ -39,10 +39,11 @@ data class BehaviorSignals(
     val isPhubbing: Int = 0,
 
     // Raw UI display counts (populated by SignalAggregator)
-    val unlocks: Int = 0,
+    val rawUnlocks: Int = 0,
     val totalSessions: Int = 0,
     val microSessions: Int = 0,
     val notificationReflexCount: Int = 0,
+    val unlocks: Int = 0, // Keep for backward compatibility/ML labeling if needed
 
     // Duration-based fields for the 14-feature model
     val microSessionDurationS: Float = 0f,

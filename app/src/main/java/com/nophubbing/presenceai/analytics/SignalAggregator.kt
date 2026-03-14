@@ -34,8 +34,8 @@ class SignalAggregator(private val context: Context) {
             notifReflexRatio        = features.notifReflexRatio,
             behaviorDriftScore      = driftScore,
             timePhaseRisk           = features.timePhase,
-            voiceActivityDetected   = features.vadEnergy.toInt(),
-            peopleNearbyCount       = if (features.bleSocial > 0f) 1 else 0,
+            voiceActivityDetected   = if (features.vadEnergy > 3f) 1 else 0,
+            peopleNearbyCount       = if (features.bleSocial > -90f) 1 else 0,
             vadConfidenceScore      = features.vadEnergy,
             btSignalStrength        = features.bleSocial,
 
@@ -44,7 +44,8 @@ class SignalAggregator(private val context: Context) {
             notifToUnlockGapS       = features.avgNotifToUnlockGapS,
 
             // UI display counts
-            unlocks                 = features.unlockCountPerHour.toInt(),
+            rawUnlocks              = features.rawUnlockCount,
+            unlocks                 = features.rawUnlockCount, // Show raw count in UI
             totalSessions           = features.totalSessions,
             microSessions           = features.microSessionCount,
             notificationReflexCount = features.notifReflexCount,

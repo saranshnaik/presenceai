@@ -63,7 +63,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
             }
 
             PresenceTabRow(
-                tabs = listOf("Dashboard", "Categories", "Signals", "Debug"),
+                tabs = listOf("Dashboard", "Categories", "Insights", "Signals", "Debug"),
                 selected = selectedTab,
                 onSelect = { selectedTab = it }
             )
@@ -78,11 +78,14 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
                     microSessions = signals?.microSessions ?: 0,
                     notifReflex = signals?.notificationReflexCount ?: 0,
                     banditStats = banditStats,
-                    isRunning = isRunning
+                    isRunning = isRunning,
+                    voiceLevel = viewModel.voiceLevel.collectAsState().value,
+                    proximityStrength = viewModel.proximityStrength.collectAsState().value
                 )
                 1 -> CategoryScreen(breakdown = categoryData)
-                2 -> SignalsTab(featureVals = featureVals, pDrift = pDrift, pPhub = pPhub)
-                3 -> DebugTab(
+                2 -> InsightsScreen()
+                3 -> SignalsTab(featureVals = featureVals, pDrift = pDrift, pPhub = pPhub)
+                4 -> DebugTab(
                     pDrift = pDrift, pPhub = pPhub, presenceScore = presenceScore,
                     updateCount = updateCount, accuracy = accuracy,
                     banditStats = banditStats, featureVals = featureVals, isRunning = isRunning
@@ -171,7 +174,9 @@ private fun MainDashboard(
     shouldNudge: Boolean, nudgeFormat: NudgeFormat?,
     unlocks: Int, sessions: Int, microSessions: Int, notifReflex: Int,
     banditStats: Map<String, Any>,
-    isRunning: Boolean
+    isRunning: Boolean,
+    voiceLevel: Float,
+    proximityStrength: Float
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -222,6 +227,10 @@ private fun MainDashboard(
                 "Quick unlock",
                 if (notifReflex > 0) PresencePink else PresenceGreen, Modifier.weight(1f))
         }
+
+        Spacer(Modifier.height(20.dp))
+        RealTimeSensorRow(voiceLevel, proximityStrength)
+
         Spacer(Modifier.height(20.dp))
         InsightCard(insightText(pPhub, presenceScore, unlocks, microSessions))
         Spacer(Modifier.height(16.dp))
@@ -356,6 +365,50 @@ private fun DLine(key: String, value: String, valueColor: Color) {
 
 @Composable
 private fun DSep() = HorizontalDivider(color = Color(0xFF1A1640), modifier = Modifier.padding(vertical = 6.dp))
+
+@Composable
+private fun RealTimeSensorRow(voiceLevel: Float, proximityStrength: Float) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(BgCard)
+            .border(1.dp, BgCardBorder, RoundedCornerShape(20.dp))
+            .padding(20.dp)
+    ) {
+        Text("LIVE SENSOR SIGNALS", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Spacer(Modifier.height(16.dp))
+        SensorBar(label = "Voice Activity", value = voiceLevel / 100f, color = PresenceGreen)
+        Spacer(Modifier.height(12.dp))
+        SensorBar(label = "Nearby Proximity", value = proximityStrength / 100f, color = PresenceBlue)
+    }
+}
+
+@Composable
+private fun SensorBar(label: String, value: Float, color: Color) {
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text("${(value * 100).toInt()}%", color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(6.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color.White.copy(0.05f))
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(value.coerceIn(0f, 1f))
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Brush.horizontalGradient(listOf(color.copy(0.7f), color)))
+            )
+        }
+    }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

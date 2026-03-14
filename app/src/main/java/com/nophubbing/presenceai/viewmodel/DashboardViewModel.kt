@@ -125,6 +125,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _featureValues  = MutableStateFlow(FloatArray(FEATURE_NAMES.size) { 0f })
     val featureValues: StateFlow<FloatArray> = _featureValues.asStateFlow()
 
+    private val _voiceLevel     = MutableStateFlow(0f)
+    val voiceLevel: StateFlow<Float> = _voiceLevel.asStateFlow()
+
+    private val _proximityStrength = MutableStateFlow(0f)
+    val proximityStrength: StateFlow<Float> = _proximityStrength.asStateFlow()
+
     private val _categoryBreakdown = MutableStateFlow<List<AppCategoryClassifier.CategoryBreakdown>>(emptyList())
     val categoryBreakdown: StateFlow<List<AppCategoryClassifier.CategoryBreakdown>> = _categoryBreakdown.asStateFlow()
 
@@ -203,6 +209,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             _featureValues.value   = FloatArray(fv.size) { fv[it].toFloat() }
             _categoryBreakdown.value = s.categoryBreakdown
 
+            _voiceLevel.value      = s.vadConfidenceScore
+            _proximityStrength.value = ((s.btSignalStrength + 100f) / 0.6f).coerceIn(0f, 100f)
+
             Log.d("PresenceAI_ML",
                 "Accuracy: ${(_accuracy.value * 100).toInt()}%, P(Phub): ${step.p_phub}")
 
@@ -222,10 +231,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private fun tickScore(s: BehaviorSignals) {
         try {
             // Age factor: each second of the 5s window that passes makes unlocks
-            // feel slightly more recent. Caps at 1.15× so it doesn't over-inflate.
+            // feel slightly more recent. Caps at 1.05× so it doesn't over-inflate.
             val secondsSinceUpdate = ((System.currentTimeMillis() - s.timestamp) / 1_000L)
                 .coerceIn(0, 5)
-            val ageFactor = 1.0f + (secondsSinceUpdate * 0.03f)  // up to +15%
+            val ageFactor = 1.0f + (secondsSinceUpdate * 0.01f)  // up to +5% max
 
             val row = s.toSignalRow().copy(
                 unlockCountPerHour = (s.unlockCountPerHour * ageFactor).toDouble()

@@ -10,7 +10,7 @@ class VoiceMonitor(private val context: Context) {
 
     private var recorder: MediaRecorder? = null
 
-    fun detectVoice(): Int {
+    fun detectVoice(): Float {
         val tempFile = File(context.cacheDir, "voice_sample.3gp")
         
         return try {
@@ -29,27 +29,29 @@ class VoiceMonitor(private val context: Context) {
                 start()
             }
 
-            // Listen for 1.5 seconds
-            Thread.sleep(1500)
+            // Listen for 1.2 seconds, sampling periodically
+            var maxObserved = 0
+            val startTime = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startTime < 1200) {
+                val amp = recorder?.maxAmplitude ?: 0
+                if (amp > maxObserved) maxObserved = amp
+                Thread.sleep(200)
+            }
 
-            val amplitude = recorder?.maxAmplitude ?: 0
             stopRecording()
 
             if (tempFile.exists()) tempFile.delete()
 
-            if (amplitude > 2000) {
-                Log.d("PresenceAI", "Voice detected amplitude=$amplitude")
-                1
-            } else {
-                Log.d("PresenceAI", "No voice detected amplitude=$amplitude")
-                0
-            }
+            // Normalize: 16384 (half scale) -> 100
+            val normalized = (maxObserved.toFloat() / 163.84f).coerceIn(0f, 100f)
+            Log.d("PresenceAI", "Voice maxObserved=$maxObserved normalized=$normalized")
+            normalized
 
         } catch (e: Exception) {
             Log.e("PresenceAI", "Voice detection failed: ${e.message}")
             stopRecording()
             if (tempFile.exists()) tempFile.delete()
-            -1
+            0f
         }
     }
 

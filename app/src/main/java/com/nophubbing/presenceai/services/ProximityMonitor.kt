@@ -17,35 +17,44 @@ class ProximityMonitor(private val context: Context) {
     private val bluetoothAdapter: BluetoothAdapter? =
         BluetoothAdapter.getDefaultAdapter()
 
-    fun detectProximity(): Int {
+    fun detectProximity(): Float {
 
         if (bluetoothAdapter == null) {
             Log.e("PresenceAI", "Bluetooth not supported")
-            return -1
+            return -100f
         }
 
         if (!bluetoothAdapter.isEnabled) {
             Log.e("PresenceAI", "Bluetooth disabled")
-            return -1
+            return -100f
         }
 
         if (!PermissionManager.hasBluetoothPermission(context)) {
             Log.e("PresenceAI", "Bluetooth permissions not granted")
-            return -1
+            return -100f
         }
 
         Log.d("PresenceAI", "Starting proximity detection...")
         val latch = CountDownLatch(1)
-        var deviceDetected = false
+        var maxRssi = -100f
 
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                Log.d("PresenceAI", "Received broadcast: ${intent?.action}")
                 when (intent?.action) {
                     BluetoothDevice.ACTION_FOUND -> {
-                        deviceDetected = true
-                        Log.d("PresenceAI", "Nearby bluetooth device detected")
-                        latch.countDown()
+                        val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                        }
+                        
+                        val rssi: Short = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
+                        if (rssi != Short.MIN_VALUE) {
+                            val rssiF = rssi.toFloat()
+                            if (rssiF > maxRssi) maxRssi = rssiF
+                            Log.d("PresenceAI", "Nearby device found: ${device?.address}, RSSI=$rssi")
+                        }
                     }
                     BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                         Log.d("PresenceAI", "Discovery finished")
@@ -72,23 +81,23 @@ class ProximityMonitor(private val context: Context) {
 
             if (!started) {
                 context.unregisterReceiver(receiver)
-                return -1
+                return -100f
             }
 
-            val countMet = latch.await(10, TimeUnit.SECONDS)
-            Log.d("PresenceAI", "Latch wait finished, deviceDetected=$deviceDetected, timeout=${!countMet}")
-
+            // Wait for a short burst (3s) to get immediate results for UI
+            latch.await(3, TimeUnit.SECONDS)
+            
             bluetoothAdapter.cancelDiscovery()
             context.unregisterReceiver(receiver)
 
-            if (deviceDetected) 1 else 0
+            maxRssi
 
         } catch (e: SecurityException) {
             Log.e("PresenceAI", "Bluetooth permission error during discovery", e)
-            -1
+            -100f
         } catch (e: Exception) {
             Log.e("PresenceAI", "Bluetooth proximity detection failed", e)
-            -1
+            -100f
         }
     }
 }

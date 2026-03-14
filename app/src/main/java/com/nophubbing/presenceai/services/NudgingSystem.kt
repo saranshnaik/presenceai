@@ -13,6 +13,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.nophubbing.presenceai.MainActivity
 import kotlinx.coroutines.*
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class NudgingSystem(
     private val context    : Context,
     private val cooldownMs : Long = 15 * 1_000L   // 15 seconds for testing
-) {
+) : TextToSpeech.OnInitListener {
 
     companion object {
         private const val TAG = "NudgingSystem"
@@ -40,10 +42,10 @@ class NudgingSystem(
         // Notification channel
         const val CHANNEL_ID   = "presence_nudge_v2"
         const val CHANNEL_NAME = "Presence Nudge"
-        const val NOTIF_ID     = 1001
+        const val NOTIF_ID     = 2002
 
         // Default phubbing score threshold (0–100); anything >= this triggers a nudge
-        const val DEFAULT_THRESHOLD = 1f
+        const val DEFAULT_THRESHOLD = 0.1f
     }
 
     // ── Public state ─────────────────────────────────────────────────────────
@@ -63,11 +65,28 @@ class NudgingSystem(
 
     private var lastNudgeTime = 0L
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var tts: TextToSpeech? = null
+    private var isTtsReady = false
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     init {
         createNotificationChannel()
+        tts = TextToSpeech(context, this)
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = tts?.setLanguage(Locale.US)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.e(TAG, "TTS Language not supported")
+            } else {
+                isTtsReady = true
+                Log.d(TAG, "TTS Initialized successfully")
+            }
+        } else {
+            Log.e(TAG, "TTS Initialization failed")
+        }
     }
 
     fun start() {
@@ -82,6 +101,8 @@ class NudgingSystem(
 
     fun destroy() {
         stop()
+        tts?.stop()
+        tts?.shutdown()
         scope.cancel()
     }
 
@@ -141,13 +162,16 @@ class NudgingSystem(
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setVibrate(longArrayOf(0, 500, 200, 500))
+            .setVibrate(longArrayOf(0, 500, 250, 500))
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             // Action buttons: user feedback triggers 20s observer → online learning
             .addAction(buildAction("✅ Yes, I was phubbing",  NudgeFeedbackReceiver.ACTION_ACCEPT, score))
             .addAction(buildAction("❌ No, false alarm",       NudgeFeedbackReceiver.ACTION_DISMISS, score))
             .build()
+
+        speakNudge(label)
 
         try {
             NotificationManagerCompat.from(context).notify(NOTIF_ID, notification)
@@ -180,6 +204,14 @@ class NudgingSystem(
             }
             context.getSystemService(NotificationManager::class.java)
                 ?.createNotificationChannel(channel)
+        }
+    }
+
+    private fun speakNudge(label: String) {
+        if (isTtsReady) {
+            val speechText = "Attention. $label. Please check your phone."
+            tts?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "nudge_id")
+            Log.d(TAG, "Speaking: $speechText")
         }
     }
 
