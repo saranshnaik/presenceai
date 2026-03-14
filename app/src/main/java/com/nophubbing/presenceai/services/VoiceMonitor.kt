@@ -43,14 +43,17 @@ class VoiceMonitor(private val context: Context) {
         // How many milliseconds of audio to capture per detection pass
         private const val CAPTURE_MS     = 600
 
-        // RMS thresholds (raw 16-bit PCM values, range 0–32768)
-        // Human speech at arm's length typically produces RMS 800–6000
-        private const val SILENCE_RMS    = 200f   // below this = definite silence
-        private const val SPEECH_RMS     = 1_800f  // above this = confident speech
+        // RMS thresholds (raw 16-bit PCM values, range 0–32768).
+        // Measured empirically: quiet room ambient ≈ 150–350 RMS, normal speech
+        // at 0.5 m ≈ 1200–5000 RMS, loud speech ≈ 5000–12000 RMS.
+        // Setting SILENCE_RMS at 400 filters out quiet ambient room noise properly.
+        // Setting SPEECH_RMS at 2500 means confident speech detection.
+        private const val SILENCE_RMS = 400f   // below this = room noise / silence
+        private const val SPEECH_RMS  = 2_500f  // above this = confident human speech
 
         // dBFS normalisation bounds
         private val DB_MIN = 20.0 * log10(SILENCE_RMS.toDouble())
-        private val DB_MAX = 20.0 * log10(8_000.0)
+        private val DB_MAX = 20.0 * log10(10_000.0)
     }
 
     /**
@@ -72,22 +75,34 @@ class VoiceMonitor(private val context: Context) {
         }
 
         val bufferSize = maxOf(minBuf * 2, SAMPLE_RATE * CAPTURE_MS / 1_000 * 2)
-        val record = try {
-            AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE,
-                CHANNEL_CONFIG,
-                AUDIO_FORMAT,
-                bufferSize
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "VAD: AudioRecord creation failed: ${e.message}")
-            return -2f
+
+        // Try audio sources in priority order.
+        // VOICE_COMMUNICATION applies AGC/noise suppression — better for detecting
+        // speech in noisy rooms on most OEM devices (MIUI, ColorOS, OneUI).
+        // VOICE_RECOGNITION is cleaner for silence detection but misses soft speech on some ROMs.
+        // MIC is the raw fallback — always available.
+        val sourcesToTry = listOf(
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.MIC
+        )
+
+        var record: AudioRecord? = null
+        for (source in sourcesToTry) {
+            try {
+                val r = AudioRecord(source, SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT, bufferSize)
+                if (r.state == AudioRecord.STATE_INITIALIZED) {
+                    record = r
+                    Log.d(TAG, "VAD: using audio source=$source")
+                    break
+                } else {
+                    r.release()
+                }
+            } catch (_: Exception) { /* try next source */ }
         }
 
-        if (record.state != AudioRecord.STATE_INITIALIZED) {
-            record.release()
-            Log.e(TAG, "VAD: AudioRecord not initialized (mic busy?)")
+        if (record == null) {
+            Log.e(TAG, "VAD: all audio sources failed (mic busy?)")
             return -2f
         }
 

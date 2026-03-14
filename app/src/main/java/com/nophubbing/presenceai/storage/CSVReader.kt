@@ -8,10 +8,17 @@ import java.io.File
 
 /**
  * CSVReader — reads presenceai_dataset.csv and maps rows to SignalRow for the pipeline.
+ *
+ * Supports both schema versions:
+ *   Legacy (21 cols): no timestamp_iso prefix — cols 0..20 as before.
+ *   Current (29 cols): timestamp_iso at col 0, data starts at col 1.
+ *
+ * Detection: if p[0] contains '-' (ISO date) → current schema; else → legacy.
  */
 object CSVReader {
 
-    private const val MIN_COLS = 21
+    private const val MIN_COLS_LEGACY  = 21
+    private const val MIN_COLS_CURRENT = 29
 
     fun readAllAsSignalRows(context: Context): List<SignalRow> {
         val file = File(context.filesDir, "presenceai_dataset.csv")
@@ -36,58 +43,40 @@ object CSVReader {
         }
     }
 
-    private fun parseSignalRow(line: String): SignalRow? = try {
-        val p = line.trim().split(",")
-        if (p.size < MIN_COLS) null
-        else SignalRow(
-            timestamp                = System.currentTimeMillis(),
-            userId                   = p[0].toIntOrNull() ?: 1,
-            dayNumber                = p[1].toIntOrNull() ?: 1,
-            hourOfDay                = p[2].toInt(),
-            isEveningSession         = p[3].toInt(),
-            baselineUnlocksPerHour   = p[4].toDouble(),
-            baselineSessionDurationS = p[5].toDouble(),
-            baselineNotifGapS        = p[6].toDouble(),
-            unlockCountPerHour       = p[7].toDouble(),
-            microSessionDurationS    = p[8].toDouble(),
-            notifToUnlockGapS        = p[9].toDouble(),
-            behaviorDriftScore       = p[10].toDouble(),
-            timePhaseRisk            = p[11].toDouble(),
-            voiceActivityDetected    = p[12].toInt(),
-            peopleNearbyCount        = p[13].toInt(),
-            vadConfidenceScore       = p[14].toDouble(),
-            btSignalStrength         = p[15].toDouble(),
-            label                    = p[20].toDouble()
-        )
-    } catch (e: Exception) { null }
+    private fun parseSignalRow(line: String): SignalRow? {
+        return try {
+            val p = line.trim().split(",")
 
-    private fun parseBehaviorSignals(line: String): BehaviorSignals? = try {
-        val p = line.trim().split(",")
-        if (p.size < MIN_COLS) null
-        else BehaviorSignals(
-            userId                   = p[0].toIntOrNull() ?: 1,
-            dayNumber                = p[1].toIntOrNull() ?: 1,
-            hourOfDay                = p[2].toInt(),
-            isEveningSession         = p[3].toInt(),
-            baselineUnlocksPerHour   = p[4].toFloat(),
-            baselineSessionDurationS = p[5].toFloat(),
-            baselineNotifGapS        = p[6].toFloat(),
-            unlockCountPerHour       = p[7].toFloat(),
-            microSessionDurationS    = p[8].toFloat(),
-            notifToUnlockGapS        = p[9].toFloat(),
-            behaviorDriftScore       = p[10].toFloat(),
-            timePhaseRisk            = p[11].toFloat(),
-            voiceActivityDetected    = p[12].toInt(),
-            peopleNearbyCount        = p[13].toInt(),
-            vadConfidenceScore       = p[14].toFloat(),
-            btSignalStrength         = p[15].toFloat(),
-            pDrift                   = p[16].toFloat(),
-            presenceScore            = p[17].toFloat(),
-            nudgeSent                = p[18].toIntOrNull() ?: 0,
-            userResponse             = p[19],
-            isPhubbing               = p[20].toInt(),
-            microSessionRatio        = 0f,
-            notifReflexRatio         = 0f
-        )
-    } catch (e: Exception) { null }
+            // Detect schema: current schema has ISO timestamp at col 0 (contains '-')
+            val isCurrent = p[0].contains("-")
+            val o = if (isCurrent) 1 else 0  // offset: column index of user_id
+
+            val minCols = if (isCurrent) MIN_COLS_CURRENT else MIN_COLS_LEGACY
+            if (p.size < minCols) return null
+
+            // Label column: current=27, legacy=20
+            val labelCol = if (isCurrent) 27 else 20
+
+            SignalRow(
+                timestamp                = System.currentTimeMillis(),
+                userId                   = p[o + 0].toIntOrNull() ?: 1,
+                dayNumber                = p[o + 1].toIntOrNull() ?: 1,
+                hourOfDay                = p[o + 2].toInt(),
+                isEveningSession         = p[o + 3].toInt(),
+                baselineUnlocksPerHour   = p[o + 4].toDouble(),
+                baselineSessionDurationS = p[o + 5].toDouble(),
+                baselineNotifGapS        = p[o + 6].toDouble(),
+                unlockCountPerHour       = p[o + 7].toDouble(),
+                microSessionDurationS    = p[o + 8].toDouble(),
+                notifToUnlockGapS        = p[o + 9].toDouble(),
+                behaviorDriftScore       = p[o + 10].toDouble(),
+                timePhaseRisk            = p[o + 11].toDouble(),
+                voiceActivityDetected    = p[o + 12].toInt(),
+                peopleNearbyCount        = p[o + 13].toInt(),
+                vadConfidenceScore       = p[o + 14].toDouble(),
+                btSignalStrength         = p[o + 15].toDouble(),
+                label                    = p[labelCol].toDoubleOrNull() ?: -1.0
+            )
+        } catch (e: Exception) { null }
+    }
 }

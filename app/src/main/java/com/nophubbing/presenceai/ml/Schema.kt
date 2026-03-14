@@ -22,9 +22,58 @@ val FEATURE_NAMES = listOf(
     "bt_signal_strength"         // x13
 )
 
+/**
+ * Recalibrated weights tuned for realistic phubbing detection.
+ *
+ * Key changes from v1 (-2.50 bias, muted behavioral weights):
+ *
+ *  bias: -1.20  (was -2.50) — less aggressive prior toward "not phubbing".
+ *                              With zero signal the score is still ~77 (low risk)
+ *                              but behavioral signals now push it meaningfully.
+ *
+ *  x5 unlock_count_per_hour:    +2.80 (was +1.12) — primary phubbing driver.
+ *                                24 unlocks/hr → feature 1.0 → +2.80 alone.
+ *
+ *  x6 micro_session_duration_s: -0.80 (was -2.00) — kept negative (longer
+ *                                micro sessions = more engaged) but less dominant
+ *                                so it doesn't suppress the unlock signal.
+ *
+ *  x8 behavior_drift_score:     +3.20 (was +2.28) — strongest behavioral weight.
+ *                                Drift from baseline is the best single predictor.
+ *
+ *  x9 time_phase_risk:          +3.50 (was +4.87) — still important but slightly
+ *                                reduced so evening alone doesn't dominate.
+ *
+ *  x11 people_nearby_count:     +2.50 (was +0.68) — BLE presence now a strong
+ *                                amplifier. Combined with high unlock → nudge fires.
+ *
+ *  x12 vad_confidence_score:    +1.20 (was -0.15) — flipped positive. More voice
+ *                                confidence = more likely someone is talking to you
+ *                                and you're ignoring them = higher phubbing risk.
+ *
+ * Net effect: at 12 unlocks/hr, 60% micro ratio, evening, no BLE/VAD:
+ *   old: P(phub) ≈ 0.016  score ≈ 98   (barely moves)
+ *   new: P(phub) ≈ 0.18   score ≈ 82   (visible, feels real)
+ *
+ * At 24 unlocks/hr, high drift, evening, BLE confirmed:
+ *   old: P(phub) ≈ 0.04   score ≈ 96
+ *   new: P(phub) ≈ 0.72   score ≈ 28   (crosses nudge threshold → fires)
+ */
 val DEFAULT_WEIGHTS: List<Double> = listOf(
-    -0.1271, -0.5497, -1.1495, 1.0957, 0.8610, 1.1217, -2.0021,
-    -0.6505, 2.2815, 4.8694, 0.1924, 0.6788, -0.1477, 0.1574
+    -0.10,  // x0  hour_of_day               (minor context)
+    -0.30,  // x1  is_evening_session         (context, slightly reduces risk alone)
+    -0.80,  // x2  baseline_unlocks_per_hour  (high baseline = less anomalous)
+     0.60,  // x3  baseline_session_duration_s
+     0.40,  // x4  baseline_notif_gap_s
+     2.80,  // x5  unlock_count_per_hour      ↑↑ primary behavioral driver
+    -0.80,  // x6  micro_session_duration_s   (longer micro = more engaged)
+    -0.40,  // x7  notif_to_unlock_gap_s
+     3.20,  // x8  behavior_drift_score       ↑↑ strongest behavioral predictor
+     3.50,  // x9  time_phase_risk            ↑  evening amplifier
+     0.50,  // x10 voice_activity_detected    (binary gate)
+     2.50,  // x11 people_nearby_count        ↑↑ social context amplifier
+     1.20,  // x12 vad_confidence_score       ↑  continuous voice (was -0.15, now positive)
+     1.00   // x13 bt_signal_strength         ↑  continuous BLE
 )
 
 data class SignalRow(
@@ -65,7 +114,7 @@ data class LRWeights(
     companion object {
         fun defaults(): LRWeights = LRWeights(
             w = DEFAULT_WEIGHTS,
-            bias = -2.50,
+            bias = -1.20,
             update_count = 0,
             last_updated = Date().toString()
         )
@@ -96,7 +145,7 @@ data class PipelineConfig(
         const val RE_UNLOCK_WINDOW_MS = 60_000L
         const val DISMISS_THRESHOLD_MS = 3_000L
         const val HEARTBEAT_INTERVAL_MS = 5_000L
-        
+
         const val MIN_TRIALS_PER_ARM = 5
         const val EPSILON = 0.15f
         const val BANDIT_FULL_REWARD_S = 45
