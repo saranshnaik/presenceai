@@ -59,36 +59,32 @@ object CSVReader {
     } catch (e: Exception) { null }
 
     fun readLatestSignals(context: Context): BehaviorSignals? {
-
-        try {
-
+        return try {
             val file = File(context.filesDir, "presenceai_dataset.csv")
-
             if (!file.exists()) return null
-
             val lines = file.readLines()
-
             if (lines.size <= 1) return null   // header only
-
-            val lastLine = lines.last()
-
-            val parts = lastLine.split(",")
-
-            return BehaviorSignals(
-                timestamp = parts[0].toLong(),
-                unlocks = parts[1].toInt(),
-                microSessions = parts[2].toInt(),
-                notificationReflex = parts[3].toInt(),
-                behaviorDrift = parts[4].toFloat(),
-                timePhase = parts[5].toInt(),
-                voiceDetected = parts[6].toInt(),
-                proximityDetected = parts[7].toInt()
+            val p = lines.last().split(",")
+            if (p.size < MIN_COLS) return null
+            BehaviorSignals(
+                hourOfDay               = p[3].toIntOrNull() ?: 0,
+                isEveningSession        = p[4].toIntOrNull() ?: 0,
+                unlockCountPerHour      = p[8].toFloatOrNull() ?: 0f,
+                microSessionRatio       = 0f,
+                notifReflexRatio        = 0f,
+                behaviorDriftScore      = p[11].toFloatOrNull() ?: 0f,
+                timePhaseRisk           = p[12].toFloatOrNull() ?: 0f,
+                voiceActivityDetected   = p[13].toIntOrNull() ?: 0,
+                peopleNearbyCount       = p[14].toIntOrNull() ?: 0,
+                vadConfidenceScore      = p[15].toFloatOrNull() ?: 0f,
+                btSignalStrength        = p[16].toFloatOrNull() ?: 0f,
+                unlocks                 = p[17].toIntOrNull() ?: 0,
+                totalSessions           = p[18].toIntOrNull() ?: 0,
+                microSessions           = p[19].toIntOrNull() ?: 0,
+                notificationReflexCount = p[20].toIntOrNull() ?: 0
             )
-
         } catch (e: Exception) {
-            e.printStackTrace()
+            null
         }
-
-        return null
     }
 }

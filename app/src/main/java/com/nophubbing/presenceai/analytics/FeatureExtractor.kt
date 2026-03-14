@@ -56,14 +56,6 @@ class FeatureExtractor(private val context: Context) {
                     currentPkg?.let {
                         val dur = event.timeStamp - sessionStart
                         if (dur > 0) sessions.add(Session(it, sessionStart, event.timeStamp))
-            while (events.hasNextEvent()) {
-                events.getNextEvent(event)
-                if (event.eventType == 18) unlocks++   // KEYGUARD_HIDDEN = unlock
-                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                    if (isSystemPackage(event.packageName)) continue
-                    currentPkg?.let {
-                        val dur = event.timeStamp - sessionStart
-                        if (dur > 0) sessions.add(Session(it, sessionStart, event.timeStamp))
                     }
                     currentPkg = event.packageName
                     sessionStart = event.timeStamp
@@ -185,4 +177,3 @@ class FeatureExtractor(private val context: Context) {
         return ignored.any { pkg.startsWith(it) }
     }
 }
-

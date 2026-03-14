@@ -6,23 +6,15 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.os.Build
-import android.os.Build
 import android.os.IBinder
-import android.util.Log
-import android.util.Log
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.nophubbing.presenceai.analytics.FeatureExtractor
 import com.nophubbing.presenceai.analytics.SignalAggregator
 import com.nophubbing.presenceai.analytics.SignalRepository
 import com.nophubbing.presenceai.ml.PipelineConfig
-import com.nophubbing.presenceai.ml.PipelineConfig
 import com.nophubbing.presenceai.storage.CSVLogger
 import kotlinx.coroutines.*
-
-object MonitoringState {
-    val isRunning = kotlinx.coroutines.flow.MutableStateFlow(false)
-}
 
 /**
  * MonitoringService — ForegroundService, START_STICKY.
@@ -40,8 +32,6 @@ object MonitoringState {
  */
 class MonitoringService : Service() {
 
-    private val config = PipelineConfig()
-    private val scope  = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val config = PipelineConfig()
     private val scope  = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -65,7 +55,7 @@ class MonitoringService : Service() {
         csvLogger        = CSVLogger(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
-        MonitoringState.isRunning.value = true
+        MonitoringState.setRunning(true)
         Log.d("PresenceAI", "MonitoringService Created")
     }
 
@@ -111,7 +101,7 @@ class MonitoringService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
-        MonitoringState.isRunning.value = false
+        MonitoringState.setRunning(false)
         Log.d("PresenceAI", "MonitoringService Destroyed")
     }
 

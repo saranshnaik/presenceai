@@ -142,7 +142,29 @@ object RewardFunction {
             }
         }
 
-        // ── Ambiguous / else ──────────────────────────────────────────────────
+        return 0f
+    }
+
+    /**
+     * Simplified 3-parameter overload used by [LabelResolver].
+     * Avoids requiring a full [NudgeObservation] when screen events are not available.
+     */
+    fun computeReward(
+        phoneDownDurationMs: Long,
+        notifDismissedInMs: Long?,
+        reUnlockWithinWindowMs: Boolean
+    ): Float {
+        val phoneDownSeconds = (phoneDownDurationMs / 1_000L).toInt()
+
+        if (phoneDownSeconds >= BanditConfig.BANDIT_FULL_REWARD_S && !reUnlockWithinWindowMs) {
+            return 1f
+        }
+        if (phoneDownSeconds in BanditConfig.BANDIT_PARTIAL_S until BanditConfig.BANDIT_FULL_REWARD_S) {
+            return 0.5f
+        }
+        if (notifDismissedInMs != null && notifDismissedInMs < BanditConfig.DISMISS_THRESHOLD_MS) {
+            return if (reUnlockWithinWindowMs) -1f else -0.5f
+        }
         return 0f
     }
 }
