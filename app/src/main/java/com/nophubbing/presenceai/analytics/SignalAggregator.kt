@@ -3,78 +3,55 @@ package com.nophubbing.presenceai.analytics
 import android.content.Context
 import java.util.Calendar
 
-data class BehaviorSignals(
-    val userId: Int = 1,
-    val dayNumber: Int = 1,
-    val hourOfDay: Int,
-    val isEveningSession: Int,
-    val baselineUnlocksPerHour: Float = 3.6f,
-    val baselineSessionDurationS: Float = 52.0f,
-    val baselineNotifGapS: Float = 21.1f,
-    val unlockCountPerHour: Float,
-    val microSessionDurationS: Float,
-    val notifToUnlockGapS: Float,
-    val behaviorDriftScore: Float,
-    val timePhaseRisk: Float,
-    val voiceActivityDetected: Int = 0,
-    val peopleNearbyCount: Int = 0,
-    val vadConfidenceScore: Float = 0.0f,
-    val btSignalStrength: Float = 0.0f,
-    val pDrift: Float,
-    val presenceScore: Float,
-    val nudgeSent: Int = 0,
-    val userResponse: String = "none",
-    val isPhubbing: Int = 0,
-    
-    // UI mapping and ML extraction fallbacks
-    val timestamp: Long = System.currentTimeMillis(),
-    val totalSessions: Int = 0,
-    val unlocks: Int = 0,
-    val microSessions: Int = 0,
-    val notificationReflex: Int = 0
-)
-
+/**
+ * SignalAggregator.kt — maps FeatureExtractor.FeatureMetrics → BehaviorSignals.
+ * Produces ALL fields needed by both the 14-feature ML pipeline and the UI.
+ */
 class SignalAggregator(private val context: Context) {
 
-    fun generateSignals(
-        features: FeatureExtractor.FeatureMetrics
-    ): BehaviorSignals {
-
-        val calendar = Calendar.getInstance()
-        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+    fun generateSignals(features: FeatureExtractor.FeatureMetrics): BehaviorSignals {
+        val cal     = Calendar.getInstance()
+        val hour    = cal.get(Calendar.HOUR_OF_DAY)
         val isEvening = if (hour >= 18 || hour < 5) 1 else 0
-        
-        // Simple drift calculation: current unlocks vs baseline (3.6)
+
+        // Baseline values (personalised over time via online learning)
         val baselineUnlocks = 3.6f
-        val driftScore = (features.unlock_freq - baselineUnlocks) / baselineUnlocks
-        
-        // Presence score heuristic
-        val pDrift = if (driftScore > 0) Math.min(1.0f, driftScore / 2f) else 0.0f
-        val presenceScore = Math.max(0.0f, 100.0f * (1.0f - pDrift))
+        // behavior_drift_score: z-score of unlock rate vs baseline
+        val driftScore = (features.unlockCountPerHour - baselineUnlocks) / maxOf(baselineUnlocks, 0.1f)
 
+        // pDrift and presenceScore are filled by DashboardViewModel after ML inference.
+        // CSVLogger.updateLastRowLabel() backfills them once the 45s label is resolved.
         return BehaviorSignals(
-            hourOfDay = hour,
-            isEveningSession = isEvening,
-            unlockCountPerHour = features.unlock_freq,
-            microSessionDurationS = features.micro_session * 10f, // Scale back to representation
-            notifToUnlockGapS = features.notification_reflex * 5f, 
-            behaviorDriftScore = driftScore,
-            timePhaseRisk = features.time_phase,
-            pDrift = pDrift,
-            presenceScore = presenceScore,
-            isPhubbing = if (presenceScore < 40) 1 else 0,
-            
-            // Hardcoding hardware to 0 as requested
-            voiceActivityDetected = 0,
-            peopleNearbyCount = 0,
-            vadConfidenceScore = 0.0f,
-            btSignalStrength = 0.0f,
+            hourOfDay               = hour,
+            isEveningSession        = isEvening,
+            baselineUnlocksPerHour  = baselineUnlocks,
+            baselineSessionDurationS = 52.0f,
+            baselineNotifGapS       = 21.1f,
 
-            // Mapping to UI fields
-            unlocks = features.unlock_freq.toInt(),
-            totalSessions = features.total_sessions,
-            microSessions = features.micro_sessions_count,
-            notificationReflex = features.notification_reflex_count
+            // Live values for ML
+            unlockCountPerHour      = features.unlockCountPerHour,
+            microSessionRatio       = features.microSessionRatio,
+            notifReflexRatio        = features.notifReflexRatio,
+            behaviorDriftScore      = driftScore,
+            timePhaseRisk           = features.timePhase,
+            voiceActivityDetected   = features.vadEnergy.toInt(),
+            peopleNearbyCount       = if (features.bleSocial > 0f) 1 else 0,
+            vadConfidenceScore      = features.vadEnergy,
+            btSignalStrength        = features.bleSocial,
+
+            // Duration-based fields for the 14-feature vector
+            microSessionDurationS   = features.avgMicroSessionDurationS,
+            notifToUnlockGapS       = features.avgNotifToUnlockGapS,
+
+            // UI display counts
+            unlocks                 = features.unlockCountPerHour.toInt(),
+            totalSessions           = features.totalSessions,
+            microSessions           = features.microSessionCount,
+            notificationReflexCount = features.notifReflexCount,
+
+            // Category breakdown
+            categoryBreakdown       = features.categoryBreakdown,
+            dominantCategory        = features.dominantCategory
         )
     }
 }

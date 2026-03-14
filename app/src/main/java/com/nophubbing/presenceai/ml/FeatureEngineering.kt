@@ -1,45 +1,74 @@
 package com.nophubbing.presenceai.ml
 
-import kotlin.math.max
-import kotlin.math.min
-
+/**
+ * FeatureEngineering.kt — maps a SignalRow to a 14-element FeatureVector.
+ * Pure object. No IO. No Context. No throws for expected inputs.
+ *
+ * Normalisation ranges match the training CSV distribution.
+ * Changing the order of features breaks the dot product — NEVER reorder.
+ *
+ * NOTE on BLE / VAD gates:
+ *   x10 voice_activity_detected  → hardware binary: 0 until mic permission
+ *   x11 people_nearby_count      → converted to binary gate: 0 until BT granted
+ *   x12 vad_confidence_score     → 0.0 until mic granted
+ *   x13 bt_signal_strength       → 0.0 until BT granted
+ * When these are 0, the model still works — it just can't confirm social context.
+ * The model was trained on this distribution, so it handles it correctly.
+ */
 object FeatureEngineering {
 
-    /**
-     * Directly map from SignalRow to a 14-element feature vector
-     * aligned to the FEATURE_NAMES list in Schema.kt:
-     *   hour_of_day, is_evening_session, baseline_unlocks_per_hour,
-     *   baseline_session_duration_s, baseline_notif_gap_s, unlock_count_per_hour,
-     *   micro_session_duration_s, notif_to_unlock_gap_s, behavior_drift_score,
-     *   time_phase_risk, voice_activity_detected, people_nearby_count,
-     *   vad_confidence_score, bt_signal_strength
-     */
     fun buildFeatureVector(row: SignalRow): FeatureVector {
-        val rawFeatures = listOf(
-            row.hourOfDay.toDouble().coerce(0.0, 23.0) / 23.0,            // normalized hour
-            row.isEveningSession.toDouble(),                               // 0 or 1
-            row.baselineUnlocksPerHour.coerce(0.0, 30.0) / 30.0,         // normalized baseline
-            row.baselineSessionDurationS.coerce(0.0, 300.0) / 300.0,     // normalized session dur
-            row.baselineNotifGapS.coerce(0.0, 120.0) / 120.0,            // normalized notif gap
-            row.unlockCountPerHour.coerce(0.0, 30.0) / 30.0,             // normalized unlock count
-            row.microSessionDurationS.coerce(0.0, 60.0) / 60.0,          // normalized micro session
-            row.notifToUnlockGapS.coerce(0.0, 60.0) / 60.0,              // normalized notif->unlock
-            row.behaviorDriftScore.coerce(-3.0, 3.0) / 3.0,              // normalized drift
-            row.timePhaseRisk.coerce(0.0, 1.0),                           // already in [0,1]
-            if (row.voiceActivityDetected == 1) 1.0 else 0.0,             // hardcoded 0
-            if (row.peopleNearbyCount > 0) 1.0 else 0.0,                  // hardcoded 0
-            row.vadConfidenceScore.coerce(0.0, 1.0),                      // hardcoded 0.0
-            row.btSignalStrength.coerce(0.0, 1.0)                         // hardcoded 0.0
+        val f = listOf(
+            // x0: hour_of_day normalised to [0,1]
+            row.hourOfDay.toDouble().coerceIn(0.0, 23.0) / 23.0,
+
+            // x1: is_evening_session — binary 0/1
+            row.isEveningSession.toDouble().coerceIn(0.0, 1.0),
+
+            // x2: baseline_unlocks_per_hour — normalised [0, 30]
+            row.baselineUnlocksPerHour.coerceIn(0.0, 30.0) / 30.0,
+
+            // x3: baseline_session_duration_s — normalised [0, 300]
+            row.baselineSessionDurationS.coerceIn(0.0, 300.0) / 300.0,
+
+            // x4: baseline_notif_gap_s — normalised [0, 120]
+            row.baselineNotifGapS.coerceIn(0.0, 120.0) / 120.0,
+
+            // x5: unlock_count_per_hour — normalised [0, 30]  ← key predictor
+            row.unlockCountPerHour.coerceIn(0.0, 30.0) / 30.0,
+
+            // x6: micro_session_duration_s — normalised [0, 60]
+            row.microSessionDurationS.coerceIn(0.0, 60.0) / 60.0,
+
+            // x7: notif_to_unlock_gap_s — normalised [0, 60]
+            row.notifToUnlockGapS.coerceIn(0.0, 60.0) / 60.0,
+
+            // x8: behavior_drift_score — already a z-score, normalise [-3, 3] → [-1, 1]
+            row.behaviorDriftScore.coerceIn(-3.0, 3.0) / 3.0,
+
+            // x9: time_phase_risk — already in [0, 1]
+            row.timePhaseRisk.coerceIn(0.0, 1.0),
+
+            // x10: voice_activity_detected — binary; 0 until mic permission
+            if (row.voiceActivityDetected == 1) 1.0 else 0.0,
+
+            // x11: people_nearby_count → binary gate; 0 until BT permission
+            if (row.peopleNearbyCount > 0) 1.0 else 0.0,
+
+            // x12: vad_confidence_score — [0, 1]; 0.0 until mic granted
+            row.vadConfidenceScore.coerceIn(0.0, 1.0),
+
+            // x13: bt_signal_strength — [0, 1]; 0.0 until BT granted
+            row.btSignalStrength.coerceIn(0.0, 1.0)
         )
 
-        for ((i, f) in rawFeatures.withIndex()) {
-            if (f.isNaN() || f.isInfinite()) {
-                throw IllegalArgumentException("Feature[$i] = $f is NaN or Inf")
+        // Validate — should never trigger given coerceIn guards above
+        f.forEachIndexed { i, v ->
+            require(!v.isNaN() && !v.isInfinite()) {
+                "Feature[${FEATURE_NAMES[i]}] = $v is NaN or Inf for row at ${row.timestamp}"
             }
         }
 
-        return FeatureVector(rawFeatures)
+        return FeatureVector(f)
     }
-
-    private fun Double.coerce(min: Double, max: Double) = kotlin.math.max(min, kotlin.math.min(this, max))
 }

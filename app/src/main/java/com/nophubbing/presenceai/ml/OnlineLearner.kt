@@ -5,22 +5,26 @@ import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * OnlineLearner.kt — online gradient descent + metric computation.
+ * Pure object. No IO.
+ *
+ * One update step:
+ *   error    = label - P(drift)
+ *   w_new[i] = w_old[i] + lr × error × features[i]
+ *   bias_new = bias_old + lr × error
+ *
+ * label == -1.0 → return SAME reference (live inference, no label yet)
+ * label ∈ {0.0, 1.0} → return NEW LRWeights object (immutable update)
+ */
 object OnlineLearner {
 
-    /**
-     * Binary cross-entropy loss for one example.
-     */
     fun computeLoss(pDrift: Double, label: Double): Double {
         if (label != 0.0 && label != 1.0) return 0.0
-
-        // Clip to prevent ln(0)
-        val p = max(1e-7, min(pDrift, 1.0 - 1e-7))
+        val p = pDrift.coerceIn(1e-7, 1.0 - 1e-7)
         return -(label * ln(p) + (1.0 - label) * ln(1.0 - p))
     }
 
-    /**
-     * Binary accuracy for one example.
-     */
     fun computeAccuracy(pDrift: Double, label: Double, threshold: Double = 0.5): Double {
         if (label != 0.0 && label != 1.0) return 0.0
         val predicted = if (pDrift > threshold) 1.0 else 0.0
@@ -28,102 +32,89 @@ object OnlineLearner {
     }
 
     /**
-     * One online gradient descent step. Returns a new immutable LRWeights object.
+     * Returns a NEW immutable LRWeights object (or SAME reference if label == -1.0).
      */
-    fun update(features: List<Double>, label: Double, weights: LRWeights, config: PipelineConfig): LRWeights {
-        if (label == -1.0) {
-            return weights // Unlabeled — skip update
-        }
+    fun update(
+        features: List<Double>,
+        label: Double,
+        weights: LRWeights,
+        config: PipelineConfig
+    ): LRWeights {
+        if (label == -1.0) return weights  // ambiguous — same reference, no copy
 
-        if (label != 0.0 && label != 1.0) {
-            throw IllegalArgumentException("Invalid label: $label. Must be 0.0, 1.0, or -1.0")
+        require(label == 0.0 || label == 1.0) {
+            "Invalid label: $label. Must be 0.0, 1.0, or -1.0"
         }
 
         val pDrift = LrClassifier.predict(features, weights)
-        val error = label - pDrift
-        val lr = config.lr_learning_rate
+        val error  = label - pDrift
+        val lr     = config.lr_learning_rate
 
         val newW = weights.asList().mapIndexed { i, w -> w + lr * error * features[i] }
-        val newBias = weights.bias + lr * error
 
         return LRWeights(
-            w = newW,
-            bias = newBias,
+            w            = newW,
+            bias         = weights.bias + lr * error,
             update_count = weights.update_count + 1,
-            last_updated = java.util.Date().toString()
+            last_updated = Date().toString()
         )
     }
 
-    fun trainOnBatch(rows: List<SignalRow>, initialWeights: LRWeights, config: PipelineConfig): Pair<LRWeights, List<TrainingStep>> {
+    fun trainOnBatch(
+        rows: List<SignalRow>,
+        initialWeights: LRWeights,
+        config: PipelineConfig
+    ): Pair<LRWeights, List<TrainingStep>> {
         val steps = mutableListOf<TrainingStep>()
         var currentWeights = initialWeights
 
         for ((i, row) in rows.withIndex()) {
-            val fv = FeatureEngineering.buildFeatureVector(row).asList()
-
-            // Inference using PRE-UPDATE weights
+            val fv     = FeatureEngineering.buildFeatureVector(row).asList()
             val pDrift = LrClassifier.predict(fv, currentWeights)
-            val pPhub = LrClassifier.computePPhub(fv, currentWeights, config)
-            val nudge = LrClassifier.shouldNudge(fv, currentWeights, config)
+            val pPhub  = LrClassifier.computePPhub(fv, currentWeights, config)
+            val nudge  = LrClassifier.shouldNudge(fv, currentWeights, config)
 
             val error: Double?
             if (row.label == -1.0) {
                 error = null
-                // Do not update weights
             } else {
                 error = row.label - pDrift
-                // Create a new weights object
                 currentWeights = update(fv, row.label, currentWeights, config)
             }
 
-            val step = TrainingStep(
-                step = i,
-                p_drift = pDrift,
-                p_phub = pPhub,
-                should_nudge = nudge,
-                label = row.label,
-                error = error,
+            steps.add(TrainingStep(
+                step             = i,
+                p_drift          = pDrift,
+                p_phub           = pPhub,
+                should_nudge     = nudge,
+                label            = row.label,
+                error            = error,
                 weights_snapshot = currentWeights.asList()
-            )
-            steps.add(step)
+            ))
         }
-
         return Pair(currentWeights, steps)
     }
 
     fun computeEpochMetrics(steps: List<TrainingStep>): Map<String, Double> {
-        val totalSteps = steps.size
-        val labeledSteps = steps.count { it.label != -1.0 }
-        val discardedSteps = totalSteps - labeledSteps
-        val positiveCount = steps.count { it.label == 1.0 }
-        val negativeCount = steps.count { it.label == 0.0 }
-        val nudgeCount = steps.count { it.should_nudge }
+        val total   = steps.size
+        val labeled = steps.filter { it.label != -1.0 }
+        val nudges  = steps.count { it.should_nudge }
 
-        var avgLoss = 0.0
-        var accuracy = 0.0
-        var finalPDriftMean = 0.0
-
-        if (totalSteps > 0) {
-            finalPDriftMean = steps.sumOf { it.p_drift } / totalSteps
-        }
-
-        if (labeledSteps > 0) {
-            val totalLoss = steps.filter { it.label != -1.0 }.sumOf { computeLoss(it.p_drift, it.label) }
-            val totalAcc = steps.filter { it.label != -1.0 }.sumOf { computeAccuracy(it.p_drift, it.label) }
-            avgLoss = totalLoss / labeledSteps
-            accuracy = totalAcc / labeledSteps
-        }
+        val avgLoss = if (labeled.isEmpty()) 0.0
+                      else labeled.sumOf { computeLoss(it.p_drift, it.label) } / labeled.size
+        val accuracy = if (labeled.isEmpty()) 0.0
+                       else labeled.sumOf { computeAccuracy(it.p_drift, it.label) } / labeled.size
 
         return mapOf(
-            "total_steps" to totalSteps.toDouble(),
-            "labeled_steps" to labeledSteps.toDouble(),
-            "discarded_steps" to discardedSteps.toDouble(),
-            "avg_loss" to avgLoss,
-            "accuracy" to accuracy,
-            "positive_count" to positiveCount.toDouble(),
-            "negative_count" to negativeCount.toDouble(),
-            "nudge_count" to nudgeCount.toDouble(),
-            "final_p_drift_mean" to finalPDriftMean
+            "total_steps"      to total.toDouble(),
+            "labeled_steps"    to labeled.size.toDouble(),
+            "discarded_steps"  to (total - labeled.size).toDouble(),
+            "avg_loss"         to avgLoss,
+            "accuracy"         to accuracy,
+            "positive_count"   to steps.count { it.label == 1.0 }.toDouble(),
+            "negative_count"   to steps.count { it.label == 0.0 }.toDouble(),
+            "nudge_count"      to nudges.toDouble(),
+            "final_p_drift_mean" to if (total > 0) steps.sumOf { it.p_drift } / total else 0.0
         )
     }
 }

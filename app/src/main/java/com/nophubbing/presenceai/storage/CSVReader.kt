@@ -1,107 +1,114 @@
 package com.nophubbing.presenceai.storage
 
 import android.content.Context
+import android.util.Log
 import com.nophubbing.presenceai.analytics.BehaviorSignals
 import com.nophubbing.presenceai.ml.SignalRow
 import java.io.File
 
+/**
+ * CSVReader — reads presenceai_dataset.csv and maps rows to SignalRow for the pipeline.
+ *
+ * Column indices (0-based) — matches CSVLogger output exactly:
+ *  0  user_id            7  unlock_count_per_hour    14  vad_confidence_score
+ *  1  day_number         8  micro_session_duration_s 15  bt_signal_strength
+ *  2  hour_of_day        9  notif_to_unlock_gap_s    16  P_drift
+ *  3  is_evening_session 10 behavior_drift_score      17  presence_score
+ *  4  baseline_unlocks   11 time_phase_risk           18  nudge_sent
+ *  5  baseline_sess_dur  12 voice_activity_detected   19  user_response
+ *  6  baseline_notif_gap 13 people_nearby_count       20  is_phubbing (label)
+ *
+ * Falls back to bundled PRESENCE_AI_56k_FULL.csv from assets on first launch.
+ */
 object CSVReader {
 
-    /**
-     * Reads all rows from CSV and maps into SignalRow for batch training.
-     * Columns: user_id(0), day_number(1), hour_of_day(2), is_evening_session(3),
-     *   baseline_unlocks_per_hour(4), baseline_session_duration_s(5), baseline_notif_gap_s(6),
-     *   unlock_count_per_hour(7), micro_session_duration_s(8), notif_to_unlock_gap_s(9),
-     *   behavior_drift_score(10), time_phase_risk(11), voice_activity_detected(12),
-     *   people_nearby_count(13), vad_confidence_score(14), bt_signal_strength(15),
-     *   P_drift(16), presence_score(17), nudge_sent(18), user_response(19), is_phubbing(20)
-     */
+    private const val MIN_COLS = 21
+
     fun readAllAsSignalRows(context: Context): List<SignalRow> {
-        val rows = mutableListOf<SignalRow>()
-        try {
-            val file = File(context.filesDir, "presenceai_dataset.csv")
-            if (!file.exists()) return emptyList()
-
-            val lines = file.readLines()
-            if (lines.size <= 1) return emptyList()
-
-            for (i in 1 until lines.size) {
-                val parts = lines[i].split(",")
-                if (parts.size < 21) continue
-
-                try {
-                    rows.add(
-                        SignalRow(
-                            timestamp = System.currentTimeMillis() - (lines.size - i) * 60_000L,
-                            userId = parts[0].trim().toIntOrNull() ?: 1,
-                            dayNumber = parts[1].trim().toIntOrNull() ?: 1,
-                            hourOfDay = parts[2].trim().toIntOrNull() ?: 0,
-                            isEveningSession = parts[3].trim().toIntOrNull() ?: 0,
-                            baselineUnlocksPerHour = parts[4].trim().toDoubleOrNull() ?: 3.6,
-                            baselineSessionDurationS = parts[5].trim().toDoubleOrNull() ?: 52.0,
-                            baselineNotifGapS = parts[6].trim().toDoubleOrNull() ?: 21.1,
-                            unlockCountPerHour = parts[7].trim().toDoubleOrNull() ?: 0.0,
-                            microSessionDurationS = parts[8].trim().toDoubleOrNull() ?: 0.0,
-                            notifToUnlockGapS = parts[9].trim().toDoubleOrNull() ?: 0.0,
-                            behaviorDriftScore = parts[10].trim().toDoubleOrNull() ?: 0.0,
-                            timePhaseRisk = parts[11].trim().toDoubleOrNull() ?: 0.4,
-                            voiceActivityDetected = 0,   // forced to 0
-                            peopleNearbyCount = 0,        // forced to 0
-                            vadConfidenceScore = 0.0,     // forced to 0.0
-                            btSignalStrength = 0.0,       // forced to 0.0
-                            label = parts[20].trim().toDoubleOrNull() ?: -1.0
-                        )
-                    )
-                } catch (e: Exception) {
-                    android.util.Log.w("PresenceAI", "Skipping malformed CSV row $i: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("PresenceAI", "CSV read failed", e)
+        val file = File(context.filesDir, "presenceai_dataset.csv")
+        val lines: List<String> = if (file.exists() && file.length() > 0) {
+            file.readLines()
+        } else {
+            readBundledLines(context)
         }
-        return rows
+        if (lines.size <= 1) return emptyList()
+        return lines.drop(1).mapNotNull { parseSignalRow(it) }.also {
+            Log.d("PresenceAI", "CSVReader: loaded ${it.size} rows")
+        }
     }
+
+    private fun readBundledLines(context: Context): List<String> {
+        return try {
+            context.assets.open("PRESENCE_AI_56k_FULL.csv")
+                .bufferedReader().readLines()
+        } catch (e: Exception) {
+            Log.d("PresenceAI", "No bundled CSV: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private fun parseSignalRow(line: String): SignalRow? = try {
+        val p = line.trim().split(",")
+        if (p.size < MIN_COLS) null
+        else SignalRow(
+            timestamp                = System.currentTimeMillis(),
+            userId                   = p[0].toIntOrNull() ?: 1,
+            dayNumber                = p[1].toIntOrNull() ?: 1,
+            hourOfDay                = p[2].toInt(),
+            isEveningSession         = p[3].toInt(),
+            baselineUnlocksPerHour   = p[4].toDouble(),
+            baselineSessionDurationS = p[5].toDouble(),
+            baselineNotifGapS        = p[6].toDouble(),
+            unlockCountPerHour       = p[7].toDouble(),
+            microSessionDurationS    = p[8].toDouble(),
+            notifToUnlockGapS        = p[9].toDouble(),
+            behaviorDriftScore       = p[10].toDouble(),
+            timePhaseRisk            = p[11].toDouble(),
+            voiceActivityDetected    = p[12].toInt(),
+            peopleNearbyCount        = p[13].toInt(),
+            vadConfidenceScore       = p[14].toDouble(),
+            btSignalStrength         = p[15].toDouble(),
+            label                    = p[20].toDouble()
+        )
+    } catch (e: Exception) { null }
 
     fun readLatestSignals(context: Context): BehaviorSignals? {
-        try {
+        return try {
             val file = File(context.filesDir, "presenceai_dataset.csv")
             if (!file.exists()) return null
-
             val lines = file.readLines()
             if (lines.size <= 1) return null
-
-            val lastLine = lines.last()
-            val parts = lastLine.split(",")
-            if (parts.size < 21) return null
-
-            return BehaviorSignals(
-                userId = parts[0].trim().toIntOrNull() ?: 1,
-                dayNumber = parts[1].trim().toIntOrNull() ?: 1,
-                hourOfDay = parts[2].trim().toIntOrNull() ?: 0,
-                isEveningSession = parts[3].trim().toIntOrNull() ?: 0,
-                baselineUnlocksPerHour = parts[4].trim().toFloatOrNull() ?: 3.6f,
-                baselineSessionDurationS = parts[5].trim().toFloatOrNull() ?: 52.0f,
-                baselineNotifGapS = parts[6].trim().toFloatOrNull() ?: 21.1f,
-                unlockCountPerHour = parts[7].trim().toFloatOrNull() ?: 0.0f,
-                microSessionDurationS = parts[8].trim().toFloatOrNull() ?: 0.0f,
-                notifToUnlockGapS = parts[9].trim().toFloatOrNull() ?: 0.0f,
-                behaviorDriftScore = parts[10].trim().toFloatOrNull() ?: 0.0f,
-                timePhaseRisk = parts[11].trim().toFloatOrNull() ?: 0.4f,
-                voiceActivityDetected = 0,
-                peopleNearbyCount = 0,
-                vadConfidenceScore = 0.0f,
-                btSignalStrength = 0.0f,
-                pDrift = parts[16].trim().toFloatOrNull() ?: 0.0f,
-                presenceScore = parts[17].trim().toFloatOrNull() ?: 100.0f,
-                nudgeSent = parts[18].trim().toIntOrNull() ?: 0,
-                userResponse = parts[19].trim(),
-                isPhubbing = parts[20].trim().toIntOrNull() ?: 0,
-                timestamp = System.currentTimeMillis()
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("PresenceAI", "CSV latest read failed", e)
-        }
-        return null
+            parseBehaviorSignals(lines.last())
+        } catch (e: Exception) { null }
     }
-}
 
+    private fun parseBehaviorSignals(line: String): BehaviorSignals? = try {
+        val p = line.trim().split(",")
+        if (p.size < MIN_COLS) null
+        else BehaviorSignals(
+            userId                   = p[0].toIntOrNull() ?: 1,
+            dayNumber                = p[1].toIntOrNull() ?: 1,
+            hourOfDay                = p[2].toInt(),
+            isEveningSession         = p[3].toInt(),
+            baselineUnlocksPerHour   = p[4].toFloat(),
+            baselineSessionDurationS = p[5].toFloat(),
+            baselineNotifGapS        = p[6].toFloat(),
+            unlockCountPerHour       = p[7].toFloat(),
+            microSessionDurationS    = p[8].toFloat(),
+            notifToUnlockGapS        = p[9].toFloat(),
+            behaviorDriftScore       = p[10].toFloat(),
+            timePhaseRisk            = p[11].toFloat(),
+            voiceActivityDetected    = p[12].toInt(),
+            peopleNearbyCount        = p[13].toInt(),
+            vadConfidenceScore       = p[14].toFloat(),
+            btSignalStrength         = p[15].toFloat(),
+            pDrift                   = p[16].toFloat(),
+            presenceScore            = p[17].toFloat(),
+            nudgeSent                = p[18].toIntOrNull() ?: 0,
+            userResponse             = p[19],
+            isPhubbing               = p[20].toInt(),
+            microSessionRatio        = 0f, // Added missing parameters
+            notifReflexRatio         = 0f
+        )
+    } catch (e: Exception) { null }
+}
