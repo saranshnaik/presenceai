@@ -41,8 +41,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val config = PipelineConfig()
 
     private val pipelineRunner = PipelineRunner(config).also { runner ->
-        val saved = ModelStore.seedIfEmpty(app)
-        if (saved.update_count > 0) runner.weights = saved
+        // loadForStartup() handles schema version check internally —
+        // old v1 weights are deleted and defaults returned automatically.
+        runner.weights = ModelStore.loadForStartup(app)
+        android.util.Log.d("PresenceAI_ML",
+            "Startup weights loaded: bias=${runner.weights.bias}, updates=${runner.weights.update_count}")
     }
 
     private val banditStore = BanditStore(app)
@@ -78,6 +81,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _banditStats    = MutableStateFlow<Map<String, Any>>(emptyMap())
     val banditStats: StateFlow<Map<String, Any>> = _banditStats.asStateFlow()
+
+    // Exposed so GenAI context builder can read today's nudge count
+    private val _nudgeCountToday = MutableStateFlow(0)
+    val nudgeCountToday: StateFlow<Int> = _nudgeCountToday.asStateFlow()
 
     private val _featureValues  = MutableStateFlow(FloatArray(FEATURE_NAMES.size) { 0f })
     val featureValues: StateFlow<FloatArray> = _featureValues.asStateFlow()
@@ -148,6 +155,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             _banditStats.value     = Bandit.getStats(banditState)
             _featureValues.value   = FloatArray(fv.size) { fv[it].toFloat() }
             _categoryBreakdown.value = s.categoryBreakdown
+            _nudgeCountToday.value = csvLogger.getNudgeCountToday()
 
             android.util.Log.d("PresenceAI_ML",
                 "Accuracy: ${(_accuracy.value * 100).toInt()}%, P(Phub): ${step.p_phub}")
