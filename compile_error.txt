@@ -1,0 +1,52 @@
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+
+> Task :app:compileDebugKotlin FAILED
+w: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/analytics/FeatureExtractor.kt:52:54 'static field MOVE_TO_FOREGROUND: Int' is deprecated. Deprecated in Java.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:28:17 No parameter with name 'unlocks' found.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:29:17 No parameter with name 'microSessions' found.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:30:17 No parameter with name 'notificationReflex' found.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:31:17 No parameter with name 'behaviorDrift' found.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:32:17 No parameter with name 'timePhase' found.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:33:17 No parameter with name 'voiceDetected' found.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No parameter with name 'proximityDetected' found.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No value passed for parameter 'x1_unlock_freq'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No value passed for parameter 'x2_micro_session_ratio'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No value passed for parameter 'x3_notification_reflex'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No value passed for parameter 'x4_behavior_drift_z'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No value passed for parameter 'x5_time_phase'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No value passed for parameter 'x6_vad_energy'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/storage/CSVReader.kt:34:17 No value passed for parameter 'x7_ble_social'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/ui/screens/DashboardScreen.kt:28:28 Unresolved reference 'unlocks'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/ui/screens/DashboardScreen.kt:29:34 Unresolved reference 'microSessions'.
+e: file:///C:/Code-It-Beyond/hackathon/presenceai/app/src/main/java/com/nophubbing/presenceai/ui/screens/DashboardScreen.kt:30:32 Unresolved reference 'notificationReflex'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 5s
+14 actionable tasks: 1 executed, 13 up-to-date

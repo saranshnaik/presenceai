@@ -21,20 +21,20 @@ class CSVLogger(private val context: Context) {
                 if (file.length() == 0L) {
 
                     writer.append(
-                        "timestamp,unlocks,micro_sessions,notification_reflex," +
-                                "behavior_drift,time_phase,voice,proximity\n"
+                        "timestamp,x1_unlock_freq,x2_micro_session_ratio,x3_notification_reflex," +
+                                "x4_behavior_drift_z,x5_time_phase,x6_vad_energy,x7_ble_social\n"
                     )
                 }
 
                 writer.append(
                     "${signals.timestamp}," +
-                            "${signals.unlocks}," +
-                            "${signals.microSessions}," +
-                            "${signals.notificationReflex}," +
-                            "${signals.behaviorDrift}," +
-                            "${signals.timePhase}," +
-                            "${signals.voiceDetected}," +
-                            "${signals.proximityDetected}\n"
+                            "${signals.x1_unlock_freq}," +
+                            "${signals.x2_micro_session_ratio}," +
+                            "${signals.x3_notification_reflex}," +
+                            "${signals.x4_behavior_drift_z}," +
+                            "${signals.x5_time_phase}," +
+                            "${signals.x6_vad_energy}," +
+                            "${signals.x7_ble_social}\n"
                 )
             }
 

@@ -25,13 +25,13 @@ object CSVReader {
 
             return BehaviorSignals(
                 timestamp = parts[0].toLong(),
-                unlocks = parts[1].toInt(),
-                microSessions = parts[2].toInt(),
-                notificationReflex = parts[3].toInt(),
-                behaviorDrift = parts[4].toFloat(),
-                timePhase = parts[5].toInt(),
-                voiceDetected = parts[6].toInt(),
-                proximityDetected = parts[7].toInt()
+                x1_unlock_freq = parts[1].toFloat(),
+                x2_micro_session_ratio = parts[2].toFloat(),
+                x3_notification_reflex = parts[3].toFloat(),
+                x4_behavior_drift_z = parts[4].toFloat(),
+                x5_time_phase = parts[5].toFloat(),
+                x6_vad_energy = parts[6].toFloat(),
+                x7_ble_social = parts[7].toFloat()
             )
 
         } catch (e: Exception) {

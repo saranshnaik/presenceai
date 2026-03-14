@@ -5,44 +5,29 @@ import java.util.Calendar
 
 data class BehaviorSignals(
     val timestamp: Long,
-    val unlocks: Int,
-    val microSessions: Int,
-    val notificationReflex: Int,
-    val behaviorDrift: Float,
-    val timePhase: Int,
-    val voiceDetected: Int,
-    val proximityDetected: Int
+    val x1_unlock_freq: Float,
+    val x2_micro_session_ratio: Float,
+    val x3_notification_reflex: Float,
+    val x4_behavior_drift_z: Float,
+    val x5_time_phase: Float,
+    val x6_vad_energy: Float,
+    val x7_ble_social: Float
 )
 
 class SignalAggregator(private val context: Context) {
 
     fun generateSignals(
-        unlocks: Int,
-        microSessions: Int,
-        notificationReflex: Int,
-        behaviorDrift: Float,
-        voiceDetected: Int,
-        proximityDetected: Int,
-        micAllowed: Boolean,
-        bluetoothAllowed: Boolean
+        x1: Float,
+        x2: Float,
+        x3: Float,
+        x4: Float,
+        x5: Float,
+        x6: Float,
+        x7: Float
     ): BehaviorSignals {
-
-        val timestamp = System.currentTimeMillis()
-
-        val timePhase = computeTimePhase()
-
-        val voice = if (micAllowed) voiceDetected else -1
-        val proximity = if (bluetoothAllowed) proximityDetected else -1
-
         return BehaviorSignals(
-            timestamp,
-            unlocks,
-            microSessions,
-            notificationReflex,
-            behaviorDrift,
-            timePhase,
-            voice,
-            proximity
+            System.currentTimeMillis(),
+            x1, x2, x3, x4, x5, x6, x7
         )
     }
 

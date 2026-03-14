@@ -25,12 +25,12 @@ fun DashboardScreen(
 
     var monitoring by remember { mutableStateOf(MonitoringState.isRunning) }
 
-    val unlocks = signals?.unlocks ?: 0
-    val microSessions = signals?.microSessions ?: 0
-    val notifReflex = signals?.notificationReflex ?: 0
+    val unlocks = signals?.x1_unlock_freq?.toInt() ?: 0
+    val microSessions = signals?.x2_micro_session_ratio ?: 0f
+    val notifReflex = signals?.x3_notification_reflex?.toInt() ?: 0
 
     val presenceScore =
-        (100 - (unlocks * 2 + microSessions * 3))
+        (100 - (unlocks * 2 + (microSessions * 30).toInt()))
             .coerceIn(0, 100)
 
     Column(
@@ -125,7 +125,7 @@ fun DashboardScreen(
 
             MetricCard(
                 title = "QUICK CHECKS",
-                value = microSessions.toString(),
+                value = "${(microSessions * 100).toInt()}%",
                 subtitle = "Under 30s",
                 modifier = Modifier.weight(1f)
             )
