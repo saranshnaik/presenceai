@@ -12,7 +12,7 @@ package com.nophubbing.presenceai.ml
  *   5. IF label != -1.0 → updateWeights() (online learning)
  *   6. record TrainingStep
  */
-class PipelineRunner(private val config: PipelineConfig) {
+class PipelineRunner {
 
     var weights: LRWeights = LRWeights.defaults()
 
@@ -24,16 +24,16 @@ class PipelineRunner(private val config: PipelineConfig) {
 
     /** Process a single row — inference first, then optional weight update. */
     fun processRow(row: SignalRow): TrainingStep {
-        val fv    = FeatureEngineering.buildFeatureVector(row).asList()
-        val pDrift = LrClassifier.predict(fv, weights)
-        val pPhub  = LrClassifier.computePPhub(fv, weights, config)
-        val nudge  = LrClassifier.shouldNudge(fv, weights, config)
+        val fv     = FeatureEngineering.buildFeatureVector(row)
+        val fvList = fv.map { it.toDouble() }
+        
+        val pDrift = LrClassifier.predict(fvList, weights)
+        val pPhub  = LrClassifier.computePPhub(fvList, weights, PipelineConfig)
+        val nudge  = LrClassifier.shouldNudge(fvList, weights, PipelineConfig)
 
         var error: Double? = null
         if (row.label != -1.0) {
             error = row.label - pDrift
-            // Online Learning disabled in Heuristic Mode
-            // weights = OnlineLearner.update(fv, row.label, weights, config)
             labeledCount++
         }
 

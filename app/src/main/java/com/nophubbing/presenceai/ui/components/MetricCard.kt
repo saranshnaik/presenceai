@@ -28,11 +28,7 @@ fun MetricCard(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(BgCard, Color(0xFF120F30))
-                )
-            )
+            .background(Brush.linearGradient(listOf(BgCard, Color(0xFF120F30))))
             .border(1.dp, BgCardBorder, RoundedCornerShape(20.dp))
             .padding(18.dp)
     ) {
@@ -44,7 +40,6 @@ fun MetricCard(
             Spacer(Modifier.height(3.dp))
             Text(subtitle, color = TextSecondary, fontSize = 11.sp)
         }
-        // Accent dot
         Box(
             modifier = Modifier
                 .size(6.dp)
@@ -58,7 +53,7 @@ fun MetricCard(
 fun FeatureBar(
     label: String,
     shortLabel: String,
-    value: Float,       // 0–1 normalised for display
+    value: Float,
     rawValue: String,
     color: Color = PresenceBlue
 ) {
@@ -76,36 +71,19 @@ fun FeatureBar(
         Spacer(Modifier.width(8.dp))
         Box(
             modifier = Modifier
-                .weight(1f)
-                .height(6.dp)
+                .weight(1f).height(6.dp)
                 .clip(RoundedCornerShape(3.dp))
                 .background(Color(0xFF1E1A4A))
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animVal)
+                    .fillMaxHeight().fillMaxWidth(animVal)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(
-                        Brush.horizontalGradient(listOf(color.copy(alpha = 0.7f), color))
-                    )
+                    .background(Brush.horizontalGradient(listOf(color.copy(0.7f), color)))
             )
         }
         Spacer(Modifier.width(10.dp))
         Text(rawValue, color = color, fontSize = 11.sp,
             fontWeight = FontWeight.Bold, modifier = Modifier.width(36.dp))
-    }
-}
-
-@Composable
-fun StatusPill(text: String, color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(color.copy(alpha = 0.15f))
-            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(50))
-            .padding(horizontal = 12.dp, vertical = 5.dp)
-    ) {
-        Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }

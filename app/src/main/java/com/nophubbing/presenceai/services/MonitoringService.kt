@@ -19,7 +19,7 @@ import kotlinx.coroutines.*
 
 class MonitoringService : Service() {
 
-    private val config = PipelineConfig()
+    // private val config = PipelineConfig() // Removed: PipelineConfig is now an object
     private val scope  = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private lateinit var featureExtractor : FeatureExtractor
@@ -72,7 +72,7 @@ class MonitoringService : Service() {
             while (isActive) {
                 try { collectAndSaveSignals() }
                 catch (e: Exception) { Log.e(TAG, "Heartbeat error: ${e.message}") }
-                delay(config.heartbeat_interval_ms)
+                delay(30_000L) // Default to 30s as per context
             }
         }
     }

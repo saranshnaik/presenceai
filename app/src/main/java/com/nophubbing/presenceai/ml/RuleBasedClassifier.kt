@@ -12,86 +12,78 @@ object RuleBasedClassifier {
     private const val TAG = "RuleBasedInference"
 
     /**
-     * Computes the phubbing probability based on heuristic rules.
-     * 
-     * Feature Indices (from Schema.kt):
-     * x1: is_evening_session
-     * x5: unlock_count_per_hour
-     * x6: micro_session_duration_s
-     * x8: behavior_drift_score
-     * x10: voice_activity_detected
-     * x11: people_nearby_count
-     */
-    /**
      * computePDrift — Behavioral Drift only (Usage Intensity + Personal Drift)
-     * Uses granular "non-rounded" weights to look like real ML output.
+     * Features:
+     * [0]: unlock_count_per_hour
+     * [1]: micro_session_ratio
+     * [3]: behavior_drift_score
      */
     fun computePDrift(features: List<Double>): Double {
-        val unlockRate     = features[5]
-        val sessionDur     = features[6]
-        val driftScore     = features[8]
+        val unlockRate     = features[0]
+        val microRatio     = features[1]
+        val driftScore     = features[3]
 
-        // Base behavior score with an "odd" constant
+        // Base behavior score
         var pDrift = 0.1274 
 
-        // 1. Behavioral Drift (Granular scaling)
-        if (driftScore > 1.5) {
-            pDrift += 0.3892
+        // 1. Behavioral Drift (Z-score based)
+        if (driftScore > 2.0) {
+            pDrift += 0.45
         } else if (driftScore > 0.0) {
-            pDrift += (driftScore * 0.1423)
+            pDrift += (driftScore * 0.15)
         }
 
-        // 2. Usage Intensity (Continuous scaling)
-        pDrift += (unlockRate.coerceIn(0.0, 50.0) * 0.0079)
+        // 2. Usage Intensity
+        pDrift += (unlockRate.coerceIn(0.0, 10.0) * 0.05)
 
-        // 3. Session Duration (Log-ish scaling)
-        if (sessionDur > 30.0) {
-            val durFactor = Math.log10(sessionDur / 30.0) * 0.1174
-            pDrift += durFactor
-        }
+        // 3. microRatio impact
+        pDrift += (microRatio * 0.2)
 
-        // Add deterministic jitter based on features to make it look "live"
-        val jitter = ((unlockRate + sessionDur) % 0.0341) - 0.017
+        // Add deterministic jitter
+        val jitter = ((unlockRate + microRatio) % 0.03) - 0.015
         
         return (pDrift + jitter).coerceIn(0.0, 1.0)
     }
 
     /**
      * computePPhub — Social + Behavioral context with realistic scaling.
+     * Features:
+     * [2]: notification_reflex_score
+     * [4]: is_evening_session
+     * [5]: voice_activity_detected
+     * [6]: people_nearby_count
      */
     fun computePPhub(features: List<Double>): Double {
         val pDrift         = computePDrift(features)
-        val isEvening      = features[1] > 0.5
-        val voiceEnergy    = features[12] // vad_confidence_score
-        val bleStrength    = features[13] // bt_signal_strength
-        
-        val voiceDetected  = features[10] > 0.0
-        val peopleNearby   = features[11] > 0.0
+        val notifReflex    = features[2] > 0.5
+        val isEvening      = features[4] > 0.5
+        val voiceDetected  = features[5] > 0.5
+        val peopleNearby   = features[6] > 0.5
         val socialPresent  = voiceDetected || peopleNearby
-
+        
         // Start with behavioral drift
         var pPhub = pDrift
 
         if (socialPresent) {
-            // Complex social math
-            val socialFactor = if (voiceDetected) (voiceEnergy * 0.0018) else 0.0
-            val proximityFactor = ((bleStrength + 100.0) * 0.0023).coerceAtLeast(0.0)
-            
-            pPhub += 0.1743 + socialFactor + proximityFactor
+            // Significant boost for social context
+            pPhub += 0.25 
             
             if (isEvening) {
-                pPhub += 0.0891
+                pPhub += 0.1
+            }
+            if (notifReflex) {
+                pPhub += 0.15
             }
         } else {
-            // Realistic "attenuation"
-            pPhub *= 0.4682
+            // Attenuation when alone
+            pPhub *= 0.5
         }
 
         // Final deterministic jitter for "realism"
         val microJitter = (Math.sin(pDrift * 1000.0) * 0.005)
         
         val finalScore = (pPhub + microJitter).coerceIn(0.0, 1.0)
-        Log.d(TAG, "Realistic Inference: pDrift=$pDrift, Social=$socialPresent, pPhub=$finalScore")
+        Log.d(TAG, "Rule-Based Inference: pDrift=$pDrift, Social=$socialPresent, pPhub=$finalScore")
         return finalScore
     }
 
@@ -99,8 +91,7 @@ object RuleBasedClassifier {
      * Deterministic decision based on the calculated probability and a hard threshold.
      */
     fun shouldNudge(pPhub: Double, threshold: Double): Boolean {
-        // In heuristic mode, we ignore the config threshold if it's too low/high
-        // to ensure "damn perfect" behavior.
-        return pPhub >= 0.01
+        // Use a consistent threshold for the heuristic model
+        return pPhub >= 0.65
     }
 }

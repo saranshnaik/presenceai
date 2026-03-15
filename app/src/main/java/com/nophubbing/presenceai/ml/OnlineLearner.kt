@@ -2,8 +2,6 @@ package com.nophubbing.presenceai.ml
 
 import java.util.Date
 import kotlin.math.ln
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * OnlineLearner.kt — online gradient descent + metric computation.
@@ -37,8 +35,7 @@ object OnlineLearner {
     fun update(
         features: List<Double>,
         label: Double,
-        weights: LRWeights,
-        config: PipelineConfig
+        weights: LRWeights
     ): LRWeights {
         if (label == -1.0) return weights  // ambiguous — same reference, no copy
 
@@ -48,7 +45,7 @@ object OnlineLearner {
 
         val pDrift = LrClassifier.predict(features, weights)
         val error  = label - pDrift
-        val lr     = config.lr_learning_rate
+        val lr     = PipelineConfig.LEARNING_RATE.toDouble()
 
         val newW = weights.asList().mapIndexed { i, w -> w + lr * error * features[i] }
 
@@ -62,24 +59,23 @@ object OnlineLearner {
 
     fun trainOnBatch(
         rows: List<SignalRow>,
-        initialWeights: LRWeights,
-        config: PipelineConfig
+        initialWeights: LRWeights
     ): Pair<LRWeights, List<TrainingStep>> {
         val steps = mutableListOf<TrainingStep>()
         var currentWeights = initialWeights
 
         for ((i, row) in rows.withIndex()) {
-            val fv     = FeatureEngineering.buildFeatureVector(row).asList()
+            val fv     = FeatureEngineering.buildFeatureVector(row).toList().map { it.toDouble() }
             val pDrift = LrClassifier.predict(fv, currentWeights)
-            val pPhub  = LrClassifier.computePPhub(fv, currentWeights, config)
-            val nudge  = LrClassifier.shouldNudge(fv, currentWeights, config)
+            val pPhub  = LrClassifier.computePPhub(fv, currentWeights, PipelineConfig)
+            val nudge  = LrClassifier.shouldNudge(fv, currentWeights, PipelineConfig)
 
             val error: Double?
             if (row.label == -1.0) {
                 error = null
             } else {
                 error = row.label - pDrift
-                currentWeights = update(fv, row.label, currentWeights, config)
+                currentWeights = update(fv, row.label, currentWeights)
             }
 
             steps.add(TrainingStep(

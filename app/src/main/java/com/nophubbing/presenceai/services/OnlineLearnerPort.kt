@@ -1,21 +1,13 @@
 package com.nophubbing.presenceai.services
 
 /**
- * OnlineLearnerPort
+ * OnlineLearnerPort — decouples FeedbackActivityMonitor from PipelineRunner.
  *
- * A minimal interface that decouples FeedbackActivityMonitor and
- * FalseNegativeGuard from the concrete OnlineLearner / PipelineRunner.
- *
- * The real implementation is PresenceOnlineLearnerAdapter (inside PipelineRunner.kt),
- * which routes every call back to PipelineRunner.applyExternalWeightUpdate()
- * so all weight mutations stay in one place.
+ * update() is called after the 20s observation window with the merged label.
+ * rewardCallback is called with the bandit reward so the ViewModel can
+ * update BanditState from button-tap feedback (not just PostNudgeObserver).
  */
 interface OnlineLearnerPort {
-    /**
-     * Apply a single online learning step.
-     *
-     * @param features  raw feature vector from FeatureEngineering (same length as weights)
-     * @param label     ground-truth label: 1 = phubbing, 0 = attentive
-     */
+    /** Apply one LR gradient step. label: 1 = phubbing, 0 = attentive. */
     fun update(features: FloatArray, label: Int)
 }

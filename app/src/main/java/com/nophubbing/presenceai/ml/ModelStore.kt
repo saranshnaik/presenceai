@@ -17,7 +17,7 @@ import java.util.Date
 object ModelStore {
 
     private const val WEIGHTS_FILE  = "lr_weights.json"
-    private const val SCHEMA_VERSION = "2.0"
+    private const val SCHEMA_VERSION = "3.0" // Updated to 3.0 for 7-feature model
 
     fun loadWeights(context: Context): LRWeights {
         val file = File(context.filesDir, WEIGHTS_FILE)
@@ -29,13 +29,13 @@ object ModelStore {
             val data = JSONObject(file.readText())
             val wArray = data.getJSONArray("weights")
             val w = (0 until wArray.length()).map { wArray.getDouble(it) }
-            if (w.size != FEATURE_NAMES.size) {
-                Log.w("PresenceAI", "ModelStore: weight count mismatch, using defaults")
+            if (w.size != PipelineConfig.FEATURE_NAMES.size) {
+                Log.w("PresenceAI", "ModelStore: weight count mismatch (${w.size} vs ${PipelineConfig.FEATURE_NAMES.size}), using defaults")
                 return LRWeights.defaults()
             }
             LRWeights(
                 w            = w,
-                bias         = data.optDouble("bias", -2.5),
+                bias         = data.optDouble("bias", PipelineConfig.DEFAULT_BIAS.toDouble()),
                 update_count = data.optInt("update_count", 0),
                 last_updated = data.optString("last_updated", "")
             ).also { Log.d("PresenceAI", "ModelStore: loaded weights (${it.update_count} updates)") }
@@ -49,14 +49,13 @@ object ModelStore {
         try {
             val json = JSONObject().apply {
                 put("schema_version", SCHEMA_VERSION)
-                put("model_type", "logistic_regression_14f")
+                put("model_type", "logistic_regression_7f")
                 put("weights", JSONArray(weights.asList()))
                 put("bias", weights.bias)
                 put("update_count", weights.update_count)
                 put("last_updated", weights.last_updated)
-                put("feature_names", JSONArray(FEATURE_NAMES))
+                put("feature_names", JSONArray(PipelineConfig.FEATURE_NAMES))
             }
-            // Atomic write: tmp file then rename
             val dir  = context.filesDir
             val tmp  = File(dir, "$WEIGHTS_FILE.tmp")
             val dest = File(dir, WEIGHTS_FILE)
@@ -68,7 +67,6 @@ object ModelStore {
         }
     }
 
-    /** Seed from defaults only if weights have never been updated (cold start guard). */
     fun seedIfEmpty(context: Context): LRWeights {
         val existing = loadWeights(context)
         return if (existing.update_count == 0) {
@@ -81,11 +79,11 @@ object ModelStore {
 
     fun buildExportJson(weights: LRWeights): JSONObject = JSONObject().apply {
         put("schema_version", SCHEMA_VERSION)
-        put("model_type", "logistic_regression_14f")
+        put("model_type", "logistic_regression_7f")
         put("weights", JSONArray(weights.asList()))
         put("bias", weights.bias)
-        put("threshold", 0.01)
-        put("feature_names", JSONArray(FEATURE_NAMES))
+        put("threshold", PipelineConfig.NUDGE_THRESHOLD)
+        put("feature_names", JSONArray(PipelineConfig.FEATURE_NAMES))
         put("update_count", weights.update_count)
         put("exported_at", Date().toString())
     }
