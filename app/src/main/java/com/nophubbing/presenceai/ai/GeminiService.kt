@@ -1,9 +1,10 @@
 package com.nophubbing.presenceai.ai
 
+import android.content.Context
 import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
-import com.nophubbing.presenceai.BuildConfig
+//import com.nophubbing.presenceai.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -14,20 +15,16 @@ import kotlinx.coroutines.withContext
 object GeminiService {
 
     // IMPORTANT: User needs to provide their API key
-    private const val API_KEY = "AIzaSyCY-HbthJ9LEAQsPC8p8fAApegRN82HOEs"
     private const val MODEL_NAME = "gemini-2.5-flash"
 
     private val model by lazy {
         GenerativeModel(
             modelName = MODEL_NAME,
-            apiKey = BuildConfig.GEMINI_API_KEY
+            apiKey = "AIzaSyC5at3LmCZVqMYzqf692rOW_F1ye7XjpbM"
         )
     }
 
     suspend fun generateInsights(summaryData: String): String = withContext(Dispatchers.IO) {
-        if (BuildConfig.GEMINI_API_KEY.isBlank()) {
-            return@withContext "API Key missing. Please set GEMINI_API_KEY in local.properties."
-        }
 
         val prompt = """
             You are "Presence AI", a mindful behavioral coach. 
@@ -50,5 +47,16 @@ object GeminiService {
             Log.e("GeminiService", "Error generating insights", e)
             "Error connecting to Gemini API: ${e.message}"
         }
+    }
+
+    /**
+     * Reads the hourly summary file and generates insights.
+     */
+    suspend fun generateHourlyInsights(context: android.content.Context): String {
+        // 1. Refresh the summary file (writes to c:/Users/Apurav/AndroidStudioProjects/PresenceAI/app/files/hourly_summary.txt)
+        val summaryText = HourlySummarizer.refreshSummary(context)
+        
+        // 2. Pass the content of that summary directly to Gemini
+        return generateInsights(summaryText)
     }
 }

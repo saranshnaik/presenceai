@@ -11,6 +11,7 @@ object RuleBasedClassifier {
 
     private const val TAG = "RuleBasedInference"
     private var lastPPhub: Double = 0.0
+    private var nudgeConfirmationSteps: Int = 0
 
     /**
      * Smoother sigmoid-like curve for heuristic scaling.
@@ -35,24 +36,23 @@ object RuleBasedClassifier {
      * Moving away from 'if' jumps to continuous curves.
      */
     fun computePDrift(features: List<Double>): Double {
-        val unlockRate     = features[5]
-        val sessionDur     = features[6]
+        // Fix Scaling: Map normalized [0, 1] back to raw units
+        val unlockRate     = features[5] * 15.0
+        val sessionDur     = features[6] * 30.0
         val driftScore     = features[8]
 
-        // 1. Drift Score: Using softStep for personal deviation
-        val driftWeight = softStep(driftScore, 0.75, 4.0) * 0.4213
+        // 1. Drift Score: Reduced multiplier
+        val driftWeight = softStep(driftScore, 0.75, 4.0) * 0.15
 
-        // 2. Unlock Intensity: Continuous growth up to a plateau
-        val unlockWeight = (Math.atan(unlockRate / 12.0) / (Math.PI / 2.0)) * 0.3521
+        // 2. Unlock Intensity: Near-negligible weight
+        val unlockWeight = (Math.atan(unlockRate / 40.0) / (Math.PI / 2.0)) * 0.015
 
-        // 3. Session Duration: Logarithmic pressure
-        val durWeight = if (sessionDur > 10.0) {
-            (Math.log10(sessionDur) / 2.5).coerceIn(0.0, 1.0) * 0.2266
-        } else 0.0
+        // 3. Session Duration: Minimal impact even after 45s
+        val durWeight = softStep(sessionDur, 50.0, 0.15) * 0.015
 
-        val baseDrift = 0.0512 + driftWeight + unlockWeight + durWeight
+        val baseDrift = 0.02 + driftWeight + unlockWeight + durWeight
 
-        // Deterministic jitter (deterministic noise keeps it looking "live")
+        // Deterministic jitter
         val jitter = ((unlockRate * 1.618 + sessionDur * 0.33) % 0.02) - 0.01
         
         return baseDrift + jitter
@@ -74,27 +74,28 @@ object RuleBasedClassifier {
         // 1. Contextual Base
         var pPhub = pDrift
 
-        // 2. Social Pressure Amplification
+        // 2. Social Pressure Amplification (Aggressive Multiplicative Model)
         if (socialPresent) {
-            // Voice is the MOST CRITICAL indicator of phubbing (ignoring speech to use phone)
-            // We increase both the base multiplier and the additive weight for voice energy.
-            val voiceMultiplier = if (voiceDetected) 2.2 else 1.25
+            // Voice is the absolute dominant amplifier
+            val voiceMultiplier = if (voiceDetected) {
+                2.5 + (softStep(voiceEnergy.toDouble(), 0.35, 12.0) * 3.5)
+            } else 1.15
+            
             val voiceWeight = if (voiceDetected) {
-                // Aggressive sigmoid for voice energy (VAD)
-                softStep(voiceEnergy.toDouble(), 0.35, 12.0) * 0.6 
+                softStep(voiceEnergy.toDouble(), 0.35, 12.0) * 0.4
             } else 0.0
             
             val proximityWeight = softStep(bleStrength + 80.0, 15.0, 0.1) * 0.12
             
-            val eveningBoost = if (isEvening) 0.12 else 0.0
-            pPhub = (pPhub * (voiceMultiplier + eveningBoost)) + voiceWeight + proximityWeight
+            val eveningBoost = if (isEvening) 1.1 else 1.0
+            pPhub = (pPhub * voiceMultiplier * eveningBoost) + voiceWeight + proximityWeight
         } else {
-            // "Solitary usage" attenuation — significantly reduce score if user is alone
-            pPhub *= 0.3121 
+            // "Solitary usage" — drastic attenuation (score stays near zero when alone)
+            pPhub = (pPhub * 0.1).coerceAtMost(0.12)
         }
 
-        // 3. Temporal Smoothing (Simple EMA to prevent jitter)
-        val smoothed = (pPhub * 0.7) + (lastPPhub * 0.3)
+        // 3. Temporal Smoothing (EMA)
+        val smoothed = (pPhub * 0.4) + (lastPPhub * 0.6)
         lastPPhub = smoothed.coerceIn(0.0, 1.0)
 
         // Add micro-jitter for the "ML look"
@@ -108,9 +109,19 @@ object RuleBasedClassifier {
      * Deterministic decision based on the calculated probability and a hard threshold.
      */
     fun shouldNudge(pPhub: Double, threshold: Double): Boolean {
-        // Robust threshold should be higher than 0.01 to avoid false positives.
-        // We'll use 0.35 as a 'perfect' heuristic floor, but respect user choice if they set one.
-        val effectiveThreshold = if (threshold < 0.05) 0.35 else threshold
-        return pPhub >= effectiveThreshold
+        val effectiveThreshold = if (threshold < 0.05) 0.65 else threshold
+        
+        if (pPhub >= effectiveThreshold) {
+            nudgeConfirmationSteps++
+        } else {
+            nudgeConfirmationSteps = 0
+        }
+
+        // Require 3 consecutive steps above threshold (approx 3 seconds of sustained phubbing)
+        val confirmed = nudgeConfirmationSteps >= 3
+        if (confirmed) {
+            Log.d(TAG, "Nudge CONFIRMED after 3 steps.")
+        }
+        return confirmed
     }
 }

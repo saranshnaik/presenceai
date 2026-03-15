@@ -110,8 +110,8 @@ fun InsightsScreen() {
                     onClick = {
                         scope.launch {
                             isLoading = true
-                            val summary = InsightsRepository.getWeeklyComparison(context)
-                            resultText = GeminiService.generateInsights(summary)
+                            // Use the new hourly summary file flow
+                            resultText = GeminiService.generateHourlyInsights(context)
                             isLoading = false
                         }
                     },
