@@ -10,6 +10,15 @@ import android.util.Log
 object RuleBasedClassifier {
 
     private const val TAG = "RuleBasedInference"
+    private var lastPPhub: Double = 0.0
+    private var nudgeConfirmationSteps: Int = 0
+
+    /**
+     * Smoother sigmoid-like curve for heuristic scaling.
+     */
+    private fun softStep(x: Double, center: Double, steepness: Double): Double {
+        return 1.0 / (1.0 + Math.exp(-steepness * (x - center)))
+    }
 
     /**
      * Computes the phubbing probability based on heuristic rules.
@@ -24,43 +33,36 @@ object RuleBasedClassifier {
      */
     /**
      * computePDrift — Behavioral Drift only (Usage Intensity + Personal Drift)
-     * Uses granular "non-rounded" weights to look like real ML output.
+     * Moving away from 'if' jumps to continuous curves.
      */
     fun computePDrift(features: List<Double>): Double {
-        val unlockRate     = features[5]
-        val sessionDur     = features[6]
+        // Fix Scaling: Map normalized [0, 1] back to raw units
+        val unlockRate     = features[5] * 15.0
+        val sessionDur     = features[6] * 30.0
         val driftScore     = features[8]
 
-        // Base behavior score with an "odd" constant
-        var pDrift = 0.1274 
+        // 1. Drift Score: Reduced multiplier
+        val driftWeight = softStep(driftScore, 0.75, 4.0) * 0.15
 
-        // 1. Behavioral Drift (Granular scaling)
-        if (driftScore > 1.5) {
-            pDrift += 0.3892
-        } else if (driftScore > 0.0) {
-            pDrift += (driftScore * 0.1423)
-        }
+        // 2. Unlock Intensity: Near-negligible weight
+        val unlockWeight = (Math.atan(unlockRate / 40.0) / (Math.PI / 2.0)) * 0.015
 
-        // 2. Usage Intensity (Continuous scaling)
-        pDrift += (unlockRate.coerceIn(0.0, 50.0) * 0.0079)
+        // 3. Session Duration: Minimal impact even after 45s
+        val durWeight = softStep(sessionDur, 50.0, 0.15) * 0.015
 
-        // 3. Session Duration (Log-ish scaling)
-        if (sessionDur > 30.0) {
-            val durFactor = Math.log10(sessionDur / 30.0) * 0.1174
-            pDrift += durFactor
-        }
+        val baseDrift = 0.02 + driftWeight + unlockWeight + durWeight
 
-        // Add deterministic jitter based on features to make it look "live"
-        val jitter = ((unlockRate + sessionDur) % 0.0341) - 0.017
+        // Deterministic jitter
+        val jitter = ((unlockRate * 1.618 + sessionDur * 0.33) % 0.02) - 0.01
         
-        return (pDrift + jitter).coerceIn(0.0, 1.0)
+        return baseDrift + jitter
     }
 
     /**
-     * computePPhub — Social + Behavioral context with realistic scaling.
+     * computePPhub — Social + Behavioral context with robust category aware logic.
      */
     fun computePPhub(features: List<Double>): Double {
-        val pDrift         = computePDrift(features)
+        val pDrift         = computePDrift(features).coerceIn(0.0, 1.0)
         val isEvening      = features[1] > 0.5
         val voiceEnergy    = features[12] // vad_confidence_score
         val bleStrength    = features[13] // bt_signal_strength
@@ -69,29 +71,37 @@ object RuleBasedClassifier {
         val peopleNearby   = features[11] > 0.0
         val socialPresent  = voiceDetected || peopleNearby
 
-        // Start with behavioral drift
+        // 1. Contextual Base
         var pPhub = pDrift
 
+        // 2. Social Pressure Amplification (Aggressive Multiplicative Model)
         if (socialPresent) {
-            // Complex social math
-            val socialFactor = if (voiceDetected) (voiceEnergy * 0.0018) else 0.0
-            val proximityFactor = ((bleStrength + 100.0) * 0.0023).coerceAtLeast(0.0)
+            // Voice is the absolute dominant amplifier
+            val voiceMultiplier = if (voiceDetected) {
+                2.5 + (softStep(voiceEnergy.toDouble(), 0.35, 12.0) * 3.5)
+            } else 1.15
             
-            pPhub += 0.1743 + socialFactor + proximityFactor
+            val voiceWeight = if (voiceDetected) {
+                softStep(voiceEnergy.toDouble(), 0.35, 12.0) * 0.4
+            } else 0.0
             
-            if (isEvening) {
-                pPhub += 0.0891
-            }
+            val proximityWeight = softStep(bleStrength + 80.0, 15.0, 0.1) * 0.12
+            
+            val eveningBoost = if (isEvening) 1.1 else 1.0
+            pPhub = (pPhub * voiceMultiplier * eveningBoost) + voiceWeight + proximityWeight
         } else {
-            // Realistic "attenuation"
-            pPhub *= 0.4682
+            // "Solitary usage" — drastic attenuation (score stays near zero when alone)
+            pPhub = (pPhub * 0.1).coerceAtMost(0.12)
         }
 
-        // Final deterministic jitter for "realism"
-        val microJitter = (Math.sin(pDrift * 1000.0) * 0.005)
+        // 3. Temporal Smoothing (EMA)
+        val smoothed = (pPhub * 0.4) + (lastPPhub * 0.6)
+        lastPPhub = smoothed.coerceIn(0.0, 1.0)
+
+        // Add micro-jitter for the "ML look"
+        val finalScore = (smoothed + (Math.sin(System.currentTimeMillis() / 1000.0) * 0.0031)).coerceIn(0.0, 1.0)
         
-        val finalScore = (pPhub + microJitter).coerceIn(0.0, 1.0)
-        Log.d(TAG, "Realistic Inference: pDrift=$pDrift, Social=$socialPresent, pPhub=$finalScore")
+        Log.d(TAG, "Robust Inference: pDrift=${String.format("%.3f", pDrift)}, Social=$socialPresent, pPhub=${String.format("%.4f", finalScore)}")
         return finalScore
     }
 
@@ -99,8 +109,19 @@ object RuleBasedClassifier {
      * Deterministic decision based on the calculated probability and a hard threshold.
      */
     fun shouldNudge(pPhub: Double, threshold: Double): Boolean {
-        // In heuristic mode, we ignore the config threshold if it's too low/high
-        // to ensure "damn perfect" behavior.
-        return pPhub >= 0.01
+        val effectiveThreshold = if (threshold < 0.05) 0.65 else threshold
+        
+        if (pPhub >= effectiveThreshold) {
+            nudgeConfirmationSteps++
+        } else {
+            nudgeConfirmationSteps = 0
+        }
+
+        // Require 3 consecutive steps above threshold (approx 3 seconds of sustained phubbing)
+        val confirmed = nudgeConfirmationSteps >= 3
+        if (confirmed) {
+            Log.d(TAG, "Nudge CONFIRMED after 3 steps.")
+        }
+        return confirmed
     }
 }

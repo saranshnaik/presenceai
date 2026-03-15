@@ -1,6 +1,7 @@
 package com.nophubbing.presenceai.ai
 
 import android.content.Context
+import android.content.Context
 import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content

@@ -87,7 +87,7 @@ data class PipelineConfig(
     val heartbeat_interval_ms: Long = HEARTBEAT_INTERVAL_MS
 ) {
     companion object {
-        const val NUDGE_THRESHOLD = 0.001
+        const val NUDGE_THRESHOLD = 0.5
         const val LR_LEARNING_RATE = 0.1
         const val VAD_MULTIPLIER = 1.15
         const val MAX_NUDGES_PER_DAY = 8

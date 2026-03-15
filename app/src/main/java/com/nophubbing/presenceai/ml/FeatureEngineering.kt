@@ -56,7 +56,7 @@ object FeatureEngineering {
             if (row.peopleNearbyCount > 0) 1.0 else 0.0,
 
             // x12: vad_confidence_score — [0, 1]; 0.0 until mic granted
-            row.vadConfidenceScore.coerceIn(0.0, 1.0),
+            (row.vadConfidenceScore / 100.0).coerceIn(0.0, 1.0),
 
             // x13: bt_signal_strength — [0, 1]; 0.0 until BT granted
             row.btSignalStrength.coerceIn(0.0, 1.0)
