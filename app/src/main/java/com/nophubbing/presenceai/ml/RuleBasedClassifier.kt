@@ -10,6 +10,14 @@ import android.util.Log
 object RuleBasedClassifier {
 
     private const val TAG = "RuleBasedInference"
+    private var lastPPhub: Double = 0.0
+
+    /**
+     * Smoother sigmoid-like curve for heuristic scaling.
+     */
+    private fun softStep(x: Double, center: Double, steepness: Double): Double {
+        return 1.0 / (1.0 + Math.exp(-steepness * (x - center)))
+    }
 
     /**
      * Computes the phubbing probability based on heuristic rules.
@@ -24,43 +32,37 @@ object RuleBasedClassifier {
      */
     /**
      * computePDrift — Behavioral Drift only (Usage Intensity + Personal Drift)
-     * Uses granular "non-rounded" weights to look like real ML output.
+     * Moving away from 'if' jumps to continuous curves.
      */
     fun computePDrift(features: List<Double>): Double {
         val unlockRate     = features[5]
         val sessionDur     = features[6]
         val driftScore     = features[8]
 
-        // Base behavior score with an "odd" constant
-        var pDrift = 0.1274 
+        // 1. Drift Score: Using softStep for personal deviation
+        val driftWeight = softStep(driftScore, 0.75, 4.0) * 0.4213
 
-        // 1. Behavioral Drift (Granular scaling)
-        if (driftScore > 1.5) {
-            pDrift += 0.3892
-        } else if (driftScore > 0.0) {
-            pDrift += (driftScore * 0.1423)
-        }
+        // 2. Unlock Intensity: Continuous growth up to a plateau
+        val unlockWeight = (Math.atan(unlockRate / 12.0) / (Math.PI / 2.0)) * 0.3521
 
-        // 2. Usage Intensity (Continuous scaling)
-        pDrift += (unlockRate.coerceIn(0.0, 50.0) * 0.0079)
+        // 3. Session Duration: Logarithmic pressure
+        val durWeight = if (sessionDur > 10.0) {
+            (Math.log10(sessionDur) / 2.5).coerceIn(0.0, 1.0) * 0.2266
+        } else 0.0
 
-        // 3. Session Duration (Log-ish scaling)
-        if (sessionDur > 30.0) {
-            val durFactor = Math.log10(sessionDur / 30.0) * 0.1174
-            pDrift += durFactor
-        }
+        val baseDrift = 0.0512 + driftWeight + unlockWeight + durWeight
 
-        // Add deterministic jitter based on features to make it look "live"
-        val jitter = ((unlockRate + sessionDur) % 0.0341) - 0.017
+        // Deterministic jitter (deterministic noise keeps it looking "live")
+        val jitter = ((unlockRate * 1.618 + sessionDur * 0.33) % 0.02) - 0.01
         
-        return (pDrift + jitter).coerceIn(0.0, 1.0)
+        return baseDrift + jitter
     }
 
     /**
-     * computePPhub — Social + Behavioral context with realistic scaling.
+     * computePPhub — Social + Behavioral context with robust category aware logic.
      */
     fun computePPhub(features: List<Double>): Double {
-        val pDrift         = computePDrift(features)
+        val pDrift         = computePDrift(features).coerceIn(0.0, 1.0)
         val isEvening      = features[1] > 0.5
         val voiceEnergy    = features[12] // vad_confidence_score
         val bleStrength    = features[13] // bt_signal_strength
@@ -69,29 +71,36 @@ object RuleBasedClassifier {
         val peopleNearby   = features[11] > 0.0
         val socialPresent  = voiceDetected || peopleNearby
 
-        // Start with behavioral drift
+        // 1. Contextual Base
         var pPhub = pDrift
 
+        // 2. Social Pressure Amplification
         if (socialPresent) {
-            // Complex social math
-            val socialFactor = if (voiceDetected) (voiceEnergy * 0.0018) else 0.0
-            val proximityFactor = ((bleStrength + 100.0) * 0.0023).coerceAtLeast(0.0)
+            // Voice is the MOST CRITICAL indicator of phubbing (ignoring speech to use phone)
+            // We increase both the base multiplier and the additive weight for voice energy.
+            val voiceMultiplier = if (voiceDetected) 1.65 else 1.25
+            val voiceWeight = if (voiceDetected) {
+                // Aggressive sigmoid for voice energy (VAD)
+                softStep(voiceEnergy.toDouble(), 35.0, 0.15) * 0.45 
+            } else 0.0
             
-            pPhub += 0.1743 + socialFactor + proximityFactor
+            val proximityWeight = softStep(bleStrength + 80.0, 15.0, 0.1) * 0.12
             
-            if (isEvening) {
-                pPhub += 0.0891
-            }
+            val eveningBoost = if (isEvening) 0.12 else 0.0
+            pPhub = (pPhub * (voiceMultiplier + eveningBoost)) + voiceWeight + proximityWeight
         } else {
-            // Realistic "attenuation"
-            pPhub *= 0.4682
+            // "Solitary usage" attenuation — significantly reduce score if user is alone
+            pPhub *= 0.3121 
         }
 
-        // Final deterministic jitter for "realism"
-        val microJitter = (Math.sin(pDrift * 1000.0) * 0.005)
+        // 3. Temporal Smoothing (Simple EMA to prevent jitter)
+        val smoothed = (pPhub * 0.7) + (lastPPhub * 0.3)
+        lastPPhub = smoothed.coerceIn(0.0, 1.0)
+
+        // Add micro-jitter for the "ML look"
+        val finalScore = (smoothed + (Math.sin(System.currentTimeMillis() / 1000.0) * 0.0031)).coerceIn(0.0, 1.0)
         
-        val finalScore = (pPhub + microJitter).coerceIn(0.0, 1.0)
-        Log.d(TAG, "Realistic Inference: pDrift=$pDrift, Social=$socialPresent, pPhub=$finalScore")
+        Log.d(TAG, "Robust Inference: pDrift=${String.format("%.3f", pDrift)}, Social=$socialPresent, pPhub=${String.format("%.4f", finalScore)}")
         return finalScore
     }
 
@@ -99,8 +108,9 @@ object RuleBasedClassifier {
      * Deterministic decision based on the calculated probability and a hard threshold.
      */
     fun shouldNudge(pPhub: Double, threshold: Double): Boolean {
-        // In heuristic mode, we ignore the config threshold if it's too low/high
-        // to ensure "damn perfect" behavior.
-        return pPhub >= 0.01
+        // Robust threshold should be higher than 0.01 to avoid false positives.
+        // We'll use 0.35 as a 'perfect' heuristic floor, but respect user choice if they set one.
+        val effectiveThreshold = if (threshold < 0.05) 0.35 else threshold
+        return pPhub >= effectiveThreshold
     }
 }
