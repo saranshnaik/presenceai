@@ -13,11 +13,8 @@ import kotlinx.coroutines.withContext
  */
 object GeminiService {
 
-<<<<<<< HEAD
     // IMPORTANT: User needs to provide their API key
     private const val API_KEY = "AIzaSyCY-HbthJ9LEAQsPC8p8fAApegRN82HOEs"
-=======
->>>>>>> bb010373cf15389114c5ac08f8f055753748b302
     private const val MODEL_NAME = "gemini-2.5-flash"
 
     private val model by lazy {

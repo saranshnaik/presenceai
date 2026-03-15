@@ -78,10 +78,10 @@ object RuleBasedClassifier {
         if (socialPresent) {
             // Voice is the MOST CRITICAL indicator of phubbing (ignoring speech to use phone)
             // We increase both the base multiplier and the additive weight for voice energy.
-            val voiceMultiplier = if (voiceDetected) 1.65 else 1.25
+            val voiceMultiplier = if (voiceDetected) 2.2 else 1.25
             val voiceWeight = if (voiceDetected) {
                 // Aggressive sigmoid for voice energy (VAD)
-                softStep(voiceEnergy.toDouble(), 35.0, 0.15) * 0.45 
+                softStep(voiceEnergy.toDouble(), 0.35, 12.0) * 0.6 
             } else 0.0
             
             val proximityWeight = softStep(bleStrength + 80.0, 15.0, 0.1) * 0.12
