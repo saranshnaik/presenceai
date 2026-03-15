@@ -61,6 +61,41 @@ data class LRWeights(
     }
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * PipelineConfig — single source of truth for all ML constants.
+ */
+data class PipelineConfig(
+    val nudge_threshold: Double = NUDGE_THRESHOLD,
+    val lr_learning_rate: Double = LR_LEARNING_RATE,
+    val vad_multiplier: Double = VAD_MULTIPLIER,
+    val max_nudges_per_day: Int = MAX_NUDGES_PER_DAY,
+    val observation_window_s: Int = OBSERVATION_WINDOW_S,
+    val positive_label_threshold_s: Int = POSITIVE_LABEL_THRESHOLD_S,
+    val re_unlock_window_ms: Long = RE_UNLOCK_WINDOW_MS,
+    val dismiss_threshold_ms: Long = DISMISS_THRESHOLD_MS,
+    val heartbeat_interval_ms: Long = HEARTBEAT_INTERVAL_MS
+) {
+    companion object {
+        const val NUDGE_THRESHOLD = 0.5
+        const val LR_LEARNING_RATE = 0.1
+        const val VAD_MULTIPLIER = 1.15
+        const val MAX_NUDGES_PER_DAY = 8
+        const val OBSERVATION_WINDOW_S = 45
+        const val POSITIVE_LABEL_THRESHOLD_S = 45
+        const val RE_UNLOCK_WINDOW_MS = 60_000L
+        const val DISMISS_THRESHOLD_MS = 3_000L
+        const val HEARTBEAT_INTERVAL_MS = 5_000L
+        
+        const val MIN_TRIALS_PER_ARM = 5
+        const val EPSILON = 0.15f
+        const val BANDIT_FULL_REWARD_S = 45
+        const val BANDIT_PARTIAL_REWARD_S = 20
+    }
+}
+
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
 data class InferenceResult(
     val pDrift: Float,
     val pPhub: Float,

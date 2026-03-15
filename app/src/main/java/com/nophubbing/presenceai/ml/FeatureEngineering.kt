@@ -43,6 +43,36 @@ object FeatureEngineering {
         // x7 BLE Social Context (nearby count)
         features[6] = row.peopleNearbyCount.toFloat()
 
+<<<<<<< HEAD
         return features
+=======
+            // x8: behavior_drift_score — already a z-score, normalise [-3, 3] → [-1, 1]
+            row.behaviorDriftScore.coerceIn(-3.0, 3.0) / 3.0,
+
+            // x9: time_phase_risk — already in [0, 1]
+            row.timePhaseRisk.coerceIn(0.0, 1.0),
+
+            // x10: voice_activity_detected — binary; 0 until mic permission
+            if (row.voiceActivityDetected == 1) 1.0 else 0.0,
+
+            // x11: people_nearby_count → binary gate; 0 until BT permission
+            if (row.peopleNearbyCount > 0) 1.0 else 0.0,
+
+            // x12: vad_confidence_score — [0, 1]; 0.0 until mic granted
+            (row.vadConfidenceScore / 100.0).coerceIn(0.0, 1.0),
+
+            // x13: bt_signal_strength — [0, 1]; 0.0 until BT granted
+            row.btSignalStrength.coerceIn(0.0, 1.0)
+        )
+
+        // Validate — should never trigger given coerceIn guards above
+        f.forEachIndexed { i, v ->
+            require(!v.isNaN() && !v.isInfinite()) {
+                "Feature[${FEATURE_NAMES[i]}] = $v is NaN or Inf for row at ${row.timestamp}"
+            }
+        }
+
+        return FeatureVector(f)
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
     }
 }

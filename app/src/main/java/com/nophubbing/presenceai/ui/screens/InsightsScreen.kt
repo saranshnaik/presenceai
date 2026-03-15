@@ -18,19 +18,38 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+<<<<<<< HEAD
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.viewmodel.compose.viewModel
+=======
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.nophubbing.presenceai.ai.GeminiService
+import com.nophubbing.presenceai.ai.PresenceHistoryManager
+import com.nophubbing.presenceai.analytics.InsightsRepository
+import com.nophubbing.presenceai.ui.components.*
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
 import com.nophubbing.presenceai.ui.theme.*
 import com.nophubbing.presenceai.viewmodel.DashboardViewModel
 
 @Composable
+<<<<<<< HEAD
 fun InsightsScreen(vm: DashboardViewModel = viewModel()) {
     val weeklyInsight  by vm.weeklyInsight.collectAsState()
     val isLoading      by vm.isLoadingInsight.collectAsState()
     val banditStats    by vm.banditStats.collectAsState()
     val updateCount    by vm.updateCount.collectAsState()
     val presenceScore  by vm.presenceScore.collectAsState()
+=======
+fun InsightsScreen() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(false) }
+    var resultText by remember { mutableStateOf("Tap the button to generate personalized AI insights based on your usage data.") }
+    var comparisonText by remember { mutableStateOf("") }
+    val history = remember { PresenceHistoryManager.getHistoryList(context) }
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
 
     val hCount   = (banditStats["haptic_count"] as? Int)    ?: 0
     val hAvg     = (banditStats["haptic_avg"]   as? Float)  ?: 0f
@@ -54,7 +73,83 @@ fun InsightsScreen(vm: DashboardViewModel = viewModel()) {
         Spacer(Modifier.height(10.dp))
         ClaudeCard(weeklyInsight, isLoading) { vm.generateWeeklyInsight() }
 
+<<<<<<< HEAD
         Spacer(Modifier.height(30.dp))
+=======
+                Spacer(Modifier.height(16.dp))
+
+                if (isLoading) {
+                    CircularProgressIndicator(color = PresencePurple, modifier = Modifier.size(32.dp))
+                } else {
+                    Text(
+                        resultText,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            isLoading = true
+                            val summary = InsightsRepository.getWeeklyComparison(context)
+                            resultText = GeminiService.generateInsights(context, summary)
+                            isLoading = false
+                        }
+                    },
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = PresencePurple),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Regenerate Insights")
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(32.dp))
+
+        // ── Historical Visualization ──────────────────────────────────
+        Text(
+            "HISTORICAL TRENDS",
+            color = TextMuted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
+        )
+        Spacer(Modifier.height(16.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(BgCard)
+                .border(1.dp, BgCardBorder, RoundedCornerShape(20.dp))
+                .padding(20.dp)
+        ) {
+            Column {
+                PresenceLineChart(history = history, modifier = Modifier.fillMaxWidth())
+                
+                Spacer(Modifier.height(32.dp))
+                
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    ScoreBarChart(history = history, modifier = Modifier.weight(1.2f))
+                    Spacer(Modifier.width(16.dp))
+                    NudgeAcceptancePieChart(
+                        acceptanceRate = history.lastOrNull()?.acceptanceRate ?: 0,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(32.dp))
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
     }
 }
 

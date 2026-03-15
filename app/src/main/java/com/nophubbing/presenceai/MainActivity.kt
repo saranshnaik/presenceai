@@ -9,10 +9,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import com.nophubbing.presenceai.services.MonitoringService
 import com.nophubbing.presenceai.ui.screens.DashboardScreen
+import com.nophubbing.presenceai.ui.theme.PresenceColors
 import com.nophubbing.presenceai.utils.PermissionManager
 
 class MainActivity : ComponentActivity() {
@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFF080616))
+                    .background(PresenceColors.BgDeep)
             ) {
                 DashboardScreen()
             }
