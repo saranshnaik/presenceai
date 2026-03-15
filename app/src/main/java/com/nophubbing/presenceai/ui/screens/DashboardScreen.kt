@@ -5,412 +5,846 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nophubbing.presenceai.ml.FEATURE_NAMES
 import com.nophubbing.presenceai.analytics.AppCategoryClassifier
+import com.nophubbing.presenceai.rl.BanditState
 import com.nophubbing.presenceai.rl.NudgeFormat
 import com.nophubbing.presenceai.services.MonitoringService
 import com.nophubbing.presenceai.services.MonitoringState
-import com.nophubbing.presenceai.ui.components.*
-import com.nophubbing.presenceai.ui.theme.*
+import com.nophubbing.presenceai.ui.theme.PresenceColors
+import com.nophubbing.presenceai.utils.PresenceState
+import com.nophubbing.presenceai.utils.pPhubToPresenceScore
+import com.nophubbing.presenceai.utils.presenceScoreToState
 import com.nophubbing.presenceai.viewmodel.DashboardViewModel
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROOT SCREEN — composes all tabs
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
     val signals       by viewModel.signals.collectAsState()
     val pPhub         by viewModel.pPhub.collectAsState()
-    val pDrift        by viewModel.pDrift.collectAsState()
-    val presenceScore by viewModel.presenceScore.collectAsState()
     val shouldNudge   by viewModel.shouldNudge.collectAsState()
     val nudgeFormat   by viewModel.nudgeFormat.collectAsState()
-    val accuracy      by viewModel.accuracy.collectAsState()
-    val updateCount   by viewModel.updateCount.collectAsState()
     val banditStats   by viewModel.banditStats.collectAsState()
-    val featureVals   by viewModel.featureValues.collectAsState()
     val categoryData  by viewModel.categoryBreakdown.collectAsState()
-    // Live tick counter — increments every 1s to show the score is updating
-    val tickMs = remember { kotlinx.coroutines.flow.MutableStateFlow(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) { kotlinx.coroutines.delay(1_000L); tickMs.value = System.currentTimeMillis() }
-    }
-    val lastUpdated by tickMs.collectAsState()
     val isRunning     by MonitoringState.isRunning.collectAsState()
     val context       = LocalContext.current
 
-    var selectedTab by remember { mutableStateOf(0) }
+    val presenceScore = remember(pPhub) { pPhubToPresenceScore(pPhub) }
+    val state         = remember(presenceScore) { presenceScoreToState(presenceScore) }
+
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     Box(
-        modifier = Modifier.fillMaxSize().background(
-            Brush.verticalGradient(listOf(BgDeep, BgMid, Color(0xFF0A0820)))
-        )
+        modifier = Modifier
+            .fillMaxSize()
+            .background(PresenceColors.BgDeep)
     ) {
         Column(Modifier.fillMaxSize()) {
-            TopBar(isRunning) {
-                val intent = Intent(context, MonitoringService::class.java)
-                if (!isRunning) context.startForegroundService(intent)
-                else context.stopService(intent)
-            }
+            // ── Header ────────────────────────────────────────────────────
+            PresenceHeader(
+                isMonitoring = isRunning,
+                subLabel     = state.subLabel,
+                onToggle     = {
+                    val intent = Intent(context, MonitoringService::class.java)
+                    if (!isRunning) context.startForegroundService(intent)
+                    else context.stopService(intent)
+                }
+            )
 
-            PresenceTabRow(
-                tabs = listOf("Dashboard", "Categories", "Insights", "Signals", "Debug"),
+            // ── Tab bar (4 tabs — Today, Patterns, Insights, Settings) ──
+            PresenceTabBar(
                 selected = selectedTab,
                 onSelect = { selectedTab = it }
             )
 
             when (selectedTab) {
-                0 -> MainDashboard(
-                    presenceScore = presenceScore, pPhub = pPhub, pDrift = pDrift,
-                    accuracy = accuracy, updateCount = updateCount,
-                    shouldNudge = shouldNudge, nudgeFormat = nudgeFormat,
-                    unlocks = signals?.unlocks ?: 0,
-                    sessions = signals?.totalSessions ?: 0,
-                    microSessions = signals?.microSessions ?: 0,
-                    notifReflex = signals?.notificationReflexCount ?: 0,
-                    banditStats = banditStats,
-                    isRunning = isRunning,
-                    voiceLevel = viewModel.voiceLevel.collectAsState().value,
+                0 -> TodayTab(
+                    presenceScore = presenceScore,
+                    state         = state,
+                    isLive        = isRunning,
+                    shouldNudge   = shouldNudge,
+                    nudgeFormat   = nudgeFormat,
+                    pPhub         = pPhub,
+                    unlocks       = signals?.unlocks ?: 0,
+                    bleNearby     = (signals?.peopleNearbyCount ?: 0) > 0,
+                    unlockCount   = signals?.unlocks ?: 0,
+                    quickChecks   = signals?.microSessions ?: 0,
+                    banditStats   = banditStats,
+                    voiceLevel    = viewModel.voiceLevel.collectAsState().value,
                     proximityStrength = viewModel.proximityStrength.collectAsState().value
                 )
                 1 -> CategoryScreen(breakdown = categoryData)
                 2 -> InsightsScreen()
-                3 -> SignalsTab(featureVals = featureVals, pDrift = pDrift, pPhub = pPhub)
-                4 -> DebugTab(
-                    pDrift = pDrift, pPhub = pPhub, presenceScore = presenceScore,
-                    updateCount = updateCount, accuracy = accuracy,
-                    banditStats = banditStats, featureVals = featureVals, isRunning = isRunning
-                )
+                3 -> SettingsTab()
             }
         }
     }
 }
 
-// ─── Top Bar ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// HEADER
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(isRunning: Boolean, onToggle: () -> Unit) {
+private fun PresenceHeader(
+    isMonitoring: Boolean,
+    subLabel: String,
+    onToggle: () -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
-            Text("Presence AI", fontSize = 28.sp, fontWeight = FontWeight.Black,
-                color = Color.White, letterSpacing = (-0.5).sp)
             Text(
-                if (isRunning) "Observing gracefully" else "Monitoring paused",
-                color = if (isRunning) TextSecondary else TextMuted, fontSize = 13.sp
+                "Presence AI",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = PresenceColors.TextPrimary
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subLabel,
+                fontSize = 13.sp,
+                color = PresenceColors.TextMuted
             )
         }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(
-                    if (isRunning) Brush.horizontalGradient(listOf(Color(0xFF003D2F), Color(0xFF005F48)))
-                    else           Brush.horizontalGradient(listOf(Color(0xFF3D0020), Color(0xFF5F0035)))
-                )
-                .clickable(onClick = onToggle)
-                .padding(horizontal = 20.dp, vertical = 10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).background(
-                    if (isRunning) PresenceGreen else PresencePink, RoundedCornerShape(4.dp)
-                ))
-                Spacer(Modifier.width(8.dp))
-                Text(if (isRunning) "ON" else "OFF",
-                    color = if (isRunning) PresenceGreen else PresencePink,
-                    fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
-        }
+        MonitoringToggle(isOn = isMonitoring, onClick = onToggle)
     }
 }
 
-// ─── Tab Row ─────────────────────────────────────────────────────────────────
-
 @Composable
-private fun PresenceTabRow(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+private fun MonitoringToggle(isOn: Boolean, onClick: () -> Unit) {
+    val bgColor  = if (isOn) Color(0xFF0d2a1a) else Color(0xFF1a1a1a)
+    val dotColor = if (isOn) PresenceColors.AccentGreen else Color(0xFF555555)
+    val txtColor = if (isOn) PresenceColors.AccentGreen else PresenceColors.TextMuted
+    val label    = if (isOn) "ON" else "OFF"
+
     Row(
         modifier = Modifier
-            .padding(horizontal = 24.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF100D2A))
-            .padding(4.dp)
-            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(bgColor)
+            .border(
+                1.dp,
+                if (isOn) Color(0xFF1a4a2e) else Color(0xFF2a2a2a),
+                RoundedCornerShape(20.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        tabs.forEachIndexed { idx, tab ->
+        Box(
+            Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = txtColor)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB BAR (4 tabs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun PresenceTabBar(selected: Int, onSelect: (Int) -> Unit) {
+    val tabs = listOf("Today", "Patterns", "Insights", "Settings")
+
+    LazyRow(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        itemsIndexed(tabs) { index, tab ->
+            val isActive = selected == index
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (idx == selected) BgCard else Color.Transparent)
-                    .clickable { onSelect(idx) }
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (isActive) Color(0xFF18163a) else Color.Transparent)
+                    .border(
+                        1.dp,
+                        if (isActive) Color(0xFF2a2560) else Color.Transparent,
+                        RoundedCornerShape(20.dp)
+                    )
+                    .clickable { onSelect(index) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Text(tab, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                    color = if (idx == selected) Color.White else TextMuted)
+                Text(
+                    tab,
+                    fontSize = 13.sp,
+                    fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
+                    color = if (isActive) PresenceColors.AccentPurple
+                            else PresenceColors.TextMuted
+                )
             }
         }
     }
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(12.dp))
 }
 
-// ─── Dashboard Tab ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// TODAY TAB (main dashboard)
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun MainDashboard(
-    presenceScore: Float, pPhub: Float, pDrift: Float,
-    accuracy: Float, updateCount: Int,
-    shouldNudge: Boolean, nudgeFormat: NudgeFormat?,
-    unlocks: Int, sessions: Int, microSessions: Int, notifReflex: Int,
+private fun TodayTab(
+    presenceScore: Int,
+    state: PresenceState,
+    isLive: Boolean,
+    shouldNudge: Boolean,
+    nudgeFormat: NudgeFormat?,
+    pPhub: Float,
+    unlocks: Int,
+    bleNearby: Boolean,
+    unlockCount: Int,
+    quickChecks: Int,
     banditStats: Map<String, Any>,
-    isRunning: Boolean,
     voiceLevel: Float,
     proximityStrength: Float
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 32.dp)
     ) {
-        Spacer(Modifier.height(24.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            PresenceCircle(presenceScore = presenceScore, pPhub = pPhub)
-        }
-        // Live indicator dot
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+        Spacer(Modifier.height(8.dp))
+
+        // ── Score ring ────────────────────────────────────────────────
+        ScoreRing(
+            score  = presenceScore,
+            state  = state,
+            isLive = isLive
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── Nudge card (only when active) ─────────────────────────────
+        AnimatedVisibility(
+            visible = shouldNudge,
+            enter   = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+            exit    = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
         ) {
-            Box(Modifier.size(6.dp).background(
-                if (isRunning) PresenceGreen else TextMuted, RoundedCornerShape(3.dp)
-            ))
-            Spacer(Modifier.width(6.dp))
-            Text(
-                if (isRunning) "Live — updating every second" else "Monitoring paused",
-                color = if (isRunning) PresenceGreen else TextMuted,
-                fontSize = 10.sp, fontWeight = FontWeight.Bold
-            )
+            Column {
+                NudgeCard(
+                    copy   = nudgeText(pPhub, unlocks),
+                    format = nudgeFormat?.name ?: "HAPTIC"
+                )
+                Spacer(Modifier.height(12.dp))
+            }
         }
+
+        // ── Social context row ────────────────────────────────────────
+        SectionLabel("SOCIAL CONTEXT")
+        ContextRow(
+            bleNearby    = bleNearby,
+            unlockCount  = unlockCount,
+            quickChecks  = quickChecks
+        )
 
         Spacer(Modifier.height(16.dp))
 
-        NudgeAlert(visible = shouldNudge, nudgeFormat = nudgeFormat,
-            nudgeText = nudgeText(pPhub, unlocks))
-        if (shouldNudge) Spacer(Modifier.height(16.dp))
+        // ── Live sensor overview ──────────────────────────────────────
+        SectionLabel("LIVE SENSORS")
+        SensorRow(voiceLevel = voiceLevel, proximityStrength = proximityStrength)
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard("MODEL ACCURACY", "${(accuracy * 100).toInt()}%",
-                "$updateCount updates", PresenceGreen, Modifier.weight(1f))
-            MetricCard("DRIFT SCORE", String.format("%.2f", pDrift),
-                "P(drift)", PresenceOrange, Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard("UNLOCKS", unlocks.toString(), "Last 10 min", PresenceBlue, Modifier.weight(1f))
-            MetricCard("SESSIONS", sessions.toString(), "App switches", PresencePurple, Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard("MICRO SESS", microSessions.toString(), "Under 20s", PresencePink, Modifier.weight(1f))
-            MetricCard("NOTIF REFLEX", if (notifReflex > 0) "YES" else "NO",
-                "Quick unlock",
-                if (notifReflex > 0) PresencePink else PresenceGreen, Modifier.weight(1f))
-        }
-
-        Spacer(Modifier.height(20.dp))
-        RealTimeSensorRow(voiceLevel, proximityStrength)
-
-        Spacer(Modifier.height(20.dp))
-        InsightCard(insightText(pPhub, presenceScore, unlocks, microSessions))
         Spacer(Modifier.height(16.dp))
-        if (banditStats.isNotEmpty()) BanditStatsCard(banditStats)
-        Spacer(Modifier.height(32.dp))
+
+        // ── AI insight ────────────────────────────────────────────────
+        InsightCard(
+            text = insightText(pPhub, presenceScore, unlocks, quickChecks)
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── Nudge learning ────────────────────────────────────────────
+        if (banditStats.isNotEmpty()) {
+            SectionLabel("HOW YOU RESPOND TO NUDGES")
+            BanditLearningCard(banditStats = banditStats)
+        }
     }
 }
 
-// ─── Signals Tab ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SCORE RING
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SignalsTab(featureVals: FloatArray, pDrift: Float, pPhub: Float) {
-    // Display names for the 14 features
-    val shortLabels = listOf("x0","x1","x2","x3","x4","x5","x6","x7","x8","x9","x10","x11","x12","x13")
-    val featureColors = listOf(
-        PresenceBlue, PresenceGreen, PresencePurple, PresenceOrange, PresenceBlue,
-        PresencePink, PresenceOrange, PresenceBlue, PresencePink, PresenceGreen,
-        PresenceGreen, PresenceBlue, PresenceGreen, PresenceBlue
+private fun ScoreRing(score: Int, state: PresenceState, isLive: Boolean) {
+    val animatedScore by animateIntAsState(
+        targetValue = score,
+        animationSpec = tween(1000, easing = EaseOut),
+        label = "score"
     )
-    // Normalised display values — already [0,1] after FeatureEngineering, except x8 in [-1,1]
-    val normVals = FloatArray(featureVals.size) { i ->
-        if (i == 8) (featureVals[i] + 1f) / 2f else featureVals[i].coerceIn(0f, 1f)
-    }
-    val rawLabels = featureVals.mapIndexed { i, v ->
-        when (i) {
-            10, 11 -> if (v > 0.5f) "YES" else "NO"
-            else   -> String.format("%.2f", v)
-        }
-    }
+    val animatedSweep by animateFloatAsState(
+        targetValue = score * 2.4f,     // 100 points = 240° sweep
+        animationSpec = tween(1000, easing = EaseOut),
+        label = "sweep"
+    )
+    val ringColor = state.ringColor
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)
-    ) {
-        Text("LIVE SIGNAL FEATURES (14-feature model)", color = TextMuted,
-            fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(Modifier.height(16.dp))
-
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                .background(Brush.linearGradient(listOf(BgCard, Color(0xFF0D0A28))))
-                .border(1.dp, BgCardBorder, RoundedCornerShape(20.dp))
-                .padding(20.dp)
-        ) {
-            Column {
-                featureVals.indices.forEach { i ->
-                    FeatureBar(
-                        label = FEATURE_NAMES[i], shortLabel = shortLabels[i],
-                        value = normVals[i], rawValue = rawLabels[i],
-                        color = featureColors[i]
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Text("PIPELINE OUTPUT", color = TextMuted,
-            fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PipelineOutputCard("P(DRIFT)", String.format("%.3f", pDrift), PresenceOrange, Modifier.weight(1f))
-            PipelineOutputCard("P(PHUB)",  String.format("%.3f", pPhub),
-                if (pPhub > 0.65f) PresencePink else PresenceGreen, Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(32.dp))
-    }
-}
-
-@Composable
-private fun PipelineOutputCard(title: String, value: String, color: Color, modifier: Modifier) {
-    Box(modifier.clip(RoundedCornerShape(16.dp))
-        .background(Brush.linearGradient(listOf(BgCard, Color(0xFF0D0A28))))
-        .border(1.dp, color.copy(0.3f), RoundedCornerShape(16.dp))
-        .padding(16.dp)
-    ) {
-        Column {
-            Text(title, color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            Spacer(Modifier.height(6.dp))
-            Text(value, color = color, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        }
-    }
-}
-
-// ─── Debug Tab ───────────────────────────────────────────────────────────────
-
-@Composable
-private fun DebugTab(
-    pDrift: Float, pPhub: Float, presenceScore: Float,
-    updateCount: Int, accuracy: Float,
-    banditStats: Map<String, Any>, featureVals: FloatArray, isRunning: Boolean
-) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
-        Text("DEBUG CONSOLE", color = TextMuted, fontSize = 10.sp,
-            fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(Modifier.height(12.dp))
-
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF060412))
-                .border(1.dp, Color(0xFF1A1640), RoundedCornerShape(16.dp))
-                .padding(16.dp)
-        ) {
-            Column {
-                DLine("SERVICE",      if (isRunning) "RUNNING" else "STOPPED", if (isRunning) PresenceGreen else PresencePink)
-                DLine("P(DRIFT)",     String.format("%.4f", pDrift), PresenceOrange)
-                DLine("P(PHUB)",      String.format("%.4f", pPhub), if (pPhub > 0.65f) PresencePink else PresenceGreen)
-                DLine("SCORE",        String.format("%.1f", presenceScore), PresenceBlue)
-                DLine("LR UPDATES",   updateCount.toString(), PresencePurple)
-                DLine("ACCURACY",     "${(accuracy * 100).toInt()}%", PresenceGreen)
-                DSep()
-                featureVals.forEachIndexed { i, v ->
-                    DLine(FEATURE_NAMES[i], String.format("%.4f", v), TextSecondary)
-                }
-                DSep()
-                DLine("HAPTIC COUNT", (banditStats["haptic_count"] as? Int)?.toString() ?: "0", PresenceGreen)
-                DLine("HAPTIC AVG",   String.format("%.3f", (banditStats["haptic_avg"] as? Float) ?: 0f), PresenceGreen)
-                DLine("NOTIF COUNT",  (banditStats["notif_count"] as? Int)?.toString() ?: "0", PresenceBlue)
-                DLine("NOTIF AVG",    String.format("%.3f", (banditStats["notif_avg"] as? Float) ?: 0f), PresenceBlue)
-                DLine("PREFERRED",    (banditStats["preferred_arm"] as? String) ?: "—", PresencePurple)
-            }
-        }
-        Spacer(Modifier.height(32.dp))
-    }
-}
-
-@Composable
-private fun DLine(key: String, value: String, valueColor: Color) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
-        Text("» $key", color = Color(0xFF4A4870), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-        Text(value, color = valueColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-    }
-}
-
-@Composable
-private fun DSep() = HorizontalDivider(color = Color(0xFF1A1640), modifier = Modifier.padding(vertical = 6.dp))
-
-@Composable
-private fun RealTimeSensorRow(voiceLevel: Float, proximityStrength: Float) {
-    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(BgCard)
-            .border(1.dp, BgCardBorder, RoundedCornerShape(20.dp))
-            .padding(20.dp)
+            .padding(bottom = 8.dp)
     ) {
-        Text("LIVE SENSOR SIGNALS", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-        Spacer(Modifier.height(16.dp))
-        SensorBar(label = "Voice Activity", value = voiceLevel / 100f, color = PresenceGreen)
-        Spacer(Modifier.height(12.dp))
-        SensorBar(label = "Nearby Proximity", value = proximityStrength / 100f, color = PresenceBlue)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(220.dp)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                val strokeWidth = 14.dp.toPx()
+                val radius = (size.minDimension - strokeWidth) / 2
+                val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
+                val arcSize = Size(radius * 2, radius * 2)
+
+                // Track
+                drawArc(
+                    color      = Color(0xFF16163A),
+                    startAngle = -210f,
+                    sweepAngle = 240f,
+                    useCenter  = false,
+                    topLeft    = topLeft,
+                    size       = arcSize,
+                    style      = Stroke(strokeWidth, cap = StrokeCap.Round)
+                )
+                // Fill
+                drawArc(
+                    color      = ringColor,
+                    startAngle = -210f,
+                    sweepAngle = animatedSweep,
+                    useCenter  = false,
+                    topLeft    = topLeft,
+                    size       = arcSize,
+                    style      = Stroke(strokeWidth, cap = StrokeCap.Round)
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "$animatedScore",
+                    fontSize = 52.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = PresenceColors.TextPrimary,
+                    lineHeight = 52.sp
+                )
+                Text(
+                    "PRESENCE",
+                    fontSize = 9.sp,
+                    letterSpacing = 3.sp,
+                    color = PresenceColors.TextMuted
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    state.label,
+                    fontSize = 13.sp,
+                    color = ringColor,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        if (isLive) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                // Pulsing dot
+                val pulseAnim = rememberInfiniteTransition(label = "livePulse")
+                val pulseAlpha by pulseAnim.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        tween(1000, easing = EaseInOut),
+                        RepeatMode.Reverse
+                    ),
+                    label = "pulseAlpha"
+                )
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(PresenceColors.AccentGreen.copy(alpha = pulseAlpha))
+                )
+                Text(
+                    "Live — updating every second",
+                    fontSize = 11.sp,
+                    color = PresenceColors.AccentGreen
+                )
+            }
+        } else {
+            Text(
+                "Monitoring paused",
+                fontSize = 11.sp,
+                color = PresenceColors.TextDim
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NUDGE CARD
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun NudgeCard(copy: String, format: String) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(PresenceColors.BgNudge)
+            .border(1.dp, PresenceColors.BorderNudge, RoundedCornerShape(16.dp))
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF2d1050)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (format == "HAPTIC")
+                    Icons.Default.Vibration
+                else Icons.Default.Notifications,
+                contentDescription = null,
+                tint = PresenceColors.AccentPurple,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Column {
+            Text(
+                "GENTLE NUDGE",
+                fontSize = 9.sp,
+                letterSpacing = 1.sp,
+                color = PresenceColors.AccentPurple,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                copy,
+                fontSize = 13.sp,
+                color = Color(0xFFd4c8f0),
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTEXT ROW (replaces 6 metric cards)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ContextRow(bleNearby: Boolean, unlockCount: Int, quickChecks: Int) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ContextCard(
+            label    = "NEARBY",
+            value    = if (bleNearby) "Yes" else "No",
+            subLabel = if (bleNearby) "Bluetooth confirmed" else "No one detected",
+            color    = if (bleNearby) PresenceColors.AccentCyan else PresenceColors.TextMuted,
+            modifier = Modifier.weight(1f)
+        )
+        ContextCard(
+            label    = "UNLOCKS",
+            value    = "$unlockCount",
+            subLabel = "Last 10 min",
+            color    = if (unlockCount > 3) PresenceColors.AccentAmber
+                       else PresenceColors.AccentGreen,
+            modifier = Modifier.weight(1f)
+        )
+        ContextCard(
+            label    = "QUICK CHECKS",
+            value    = "$quickChecks",
+            subLabel = "Under 20s",
+            color    = if (quickChecks > 2) PresenceColors.AccentCoral
+                       else PresenceColors.AccentGreen,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
 @Composable
-private fun SensorBar(label: String, value: Float, color: Color) {
-    Column {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-            Text("${(value * 100).toInt()}%", color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
+private fun ContextCard(
+    label: String,
+    value: String,
+    subLabel: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(PresenceColors.BgCard)
+            .border(1.dp, PresenceColors.BorderDefault, RoundedCornerShape(12.dp))
+            .padding(10.dp)
+    ) {
+        Text(
+            label,
+            fontSize = 8.sp,
+            letterSpacing = 1.sp,
+            color = PresenceColors.TextDim,
+            fontWeight = FontWeight.Bold
+        )
         Spacer(Modifier.height(6.dp))
+        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = color)
+        Spacer(Modifier.height(2.dp))
+        Text(subLabel, fontSize = 9.sp, color = PresenceColors.TextMuted, lineHeight = 12.sp)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIVE SENSOR ROW
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SensorRow(voiceLevel: Float, proximityStrength: Float) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SensorCard(
+            label    = "VOICE",
+            value    = "${(voiceLevel).toInt()}%",
+            fraction = voiceLevel / 100f,
+            color    = PresenceColors.AccentGreen,
+            modifier = Modifier.weight(1f)
+        )
+        SensorCard(
+            label    = "PROXIMITY",
+            value    = "${proximityStrength.toInt()}%",
+            fraction = proximityStrength / 100f,
+            color    = PresenceColors.AccentCyan,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun SensorCard(
+    label: String,
+    value: String,
+    fraction: Float,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val animFrac by animateFloatAsState(
+        targetValue = fraction.coerceIn(0f, 1f),
+        animationSpec = tween(800),
+        label = "sensorBar"
+    )
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(PresenceColors.BgCard)
+            .border(1.dp, PresenceColors.BorderDefault, RoundedCornerShape(12.dp))
+            .padding(10.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                label,
+                fontSize = 8.sp,
+                letterSpacing = 1.sp,
+                color = PresenceColors.TextDim,
+                fontWeight = FontWeight.Bold
+            )
+            Text(value, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = color)
+        }
+        Spacer(Modifier.height(8.dp))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
                 .background(Color.White.copy(0.05f))
         ) {
             Box(
                 Modifier
-                    .fillMaxWidth(value.coerceIn(0f, 1f))
+                    .fillMaxWidth(animFrac)
                     .fillMaxHeight()
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Brush.horizontalGradient(listOf(color.copy(0.7f), color)))
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Brush.horizontalGradient(listOf(color.copy(0.6f), color)))
             )
         }
     }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// INSIGHT CARD
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun InsightCard(text: String) {
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(PresenceColors.BgInsight)
+            .border(1.dp, PresenceColors.BorderInsight, RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Text(
+            "AI INSIGHT",
+            fontSize = 9.sp,
+            letterSpacing = 1.sp,
+            color = Color(0xFF1d6a56),
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text,
+            fontSize = 13.sp,
+            color = Color(0xFF9de0ce),
+            lineHeight = 20.sp
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANDIT LEARNING CARD
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun BanditLearningCard(banditStats: Map<String, Any>) {
+    val hapticCount = (banditStats["haptic_count"] as? Int) ?: 0
+    val hapticAvg   = (banditStats["haptic_avg"] as? Float) ?: 0f
+    val notifCount  = (banditStats["notif_count"] as? Int) ?: 0
+    val notifAvg    = (banditStats["notif_avg"] as? Float) ?: 0f
+    val preferred   = (banditStats["preferred_arm"] as? String) ?: "—"
+
+    val hapticFrac = if (hapticAvg > 0) (hapticAvg + 1f) / 2f else 0.1f
+    val notifFrac  = if (notifAvg > 0) (notifAvg + 1f) / 2f else 0.1f
+
+    val preferredLabel = when {
+        hapticCount < 5 || notifCount < 5 ->
+            "Still learning your preferences..."
+        hapticAvg > notifAvg ->
+            "You respond ${String.format("%.1f", hapticAvg / notifAvg.coerceAtLeast(0.01f))}× better to vibrations"
+        else ->
+            "You respond better to notifications"
+    }
+
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(PresenceColors.BgCard)
+            .border(1.dp, PresenceColors.BorderDefault, RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Text(
+            "LEARNING YOUR PREFERENCES",
+            fontSize = 9.sp,
+            letterSpacing = 1.5.sp,
+            color = PresenceColors.TextDim,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            BanditArm(
+                label     = "Haptic",
+                value     = String.format("avg %.2f", hapticAvg),
+                fraction  = hapticFrac,
+                barColor  = PresenceColors.AccentPurple,
+                textColor = PresenceColors.AccentGreen,
+                modifier  = Modifier.weight(1f)
+            )
+            BanditArm(
+                label     = "Notification",
+                value     = String.format("avg %.2f", notifAvg),
+                fraction  = notifFrac,
+                barColor  = Color(0xFF2a2560),
+                textColor = PresenceColors.TextMuted,
+                modifier  = Modifier.weight(1f)
+            )
+        }
+
+        HorizontalDivider(
+            color = PresenceColors.BorderDefault,
+            modifier = Modifier.padding(vertical = 10.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                preferredLabel,
+                fontSize = 11.sp,
+                color = PresenceColors.TextMuted,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF0d2a1a))
+                    .border(1.dp, Color(0xFF1a4a2e), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    preferred,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = PresenceColors.AccentGreen
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BanditArm(
+    label: String,
+    value: String,
+    fraction: Float,
+    barColor: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val animFrac by animateFloatAsState(
+        targetValue = fraction.coerceIn(0.05f, 1f),
+        animationSpec = tween(800),
+        label = "bar"
+    )
+    Column(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp),
+            contentAlignment = Alignment.BottomStart
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(animFrac)
+                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                    .background(barColor)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(label, fontSize = 10.sp, color = PresenceColors.TextMuted)
+        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = textColor)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION LABEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        fontSize = 9.sp,
+        letterSpacing = 1.5.sp,
+        color = PresenceColors.TextDim,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 8.dp)
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS TAB (placeholder — debug via long press in future)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsTab() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp)
+    ) {
+        SectionLabel("SETTINGS")
+        Spacer(Modifier.height(16.dp))
+
+        // Version info
+        SettingsRow("App Version", "1.0.0")
+        SettingsRow("Model", "14-feature LR + ε-Greedy Bandit")
+        SettingsRow("Update Interval", "5s heartbeat, 1s ticker")
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            "Debug console is available via long press on the header (coming soon).",
+            fontSize = 12.sp,
+            color = PresenceColors.TextMuted,
+            lineHeight = 18.sp
+        )
+    }
+}
+
+@Composable
+private fun SettingsRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(PresenceColors.BgCard)
+            .border(1.dp, PresenceColors.BorderDefault, RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 13.sp, color = PresenceColors.TextSecondary)
+        Text(value, fontSize = 13.sp, color = PresenceColors.TextPrimary, fontWeight = FontWeight.Medium)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 
 private fun nudgeText(pPhub: Float, unlocks: Int) = when {
     unlocks >= 8  -> "You've unlocked $unlocks times recently. The conversation here is worth more."
@@ -418,10 +852,10 @@ private fun nudgeText(pPhub: Float, unlocks: Int) = when {
     else          -> "The person with you deserves your full attention."
 }
 
-private fun insightText(pPhub: Float, score: Float, unlocks: Int, micro: Int) = when {
+private fun insightText(pPhub: Float, score: Int, unlocks: Int, micro: Int) = when {
     score >= 85 -> "Great presence — low phone engagement detected. Keep it up!"
     unlocks > 6 && micro > 3 ->
-        "You've unlocked $unlocks times with $micro micro-sessions. Try keeping the phone face-down."
+        "You've unlocked $unlocks times with $micro quick checks. Try keeping the phone face-down."
     pPhub > 0.6f -> "Elevated phone engagement detected. Try the phone-face-down technique."
     else -> "Moderate phone activity. Awareness is the first step to change."
 }

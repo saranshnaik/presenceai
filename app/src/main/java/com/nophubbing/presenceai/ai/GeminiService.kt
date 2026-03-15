@@ -3,6 +3,7 @@ package com.nophubbing.presenceai.ai
 import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
+import com.nophubbing.presenceai.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -12,20 +13,23 @@ import kotlinx.coroutines.withContext
  */
 object GeminiService {
 
+<<<<<<< HEAD
     // IMPORTANT: User needs to provide their API key
     private const val API_KEY = "AIzaSyCY-HbthJ9LEAQsPC8p8fAApegRN82HOEs"
+=======
+>>>>>>> bb010373cf15389114c5ac08f8f055753748b302
     private const val MODEL_NAME = "gemini-2.5-flash"
 
     private val model by lazy {
         GenerativeModel(
             modelName = MODEL_NAME,
-            apiKey = API_KEY
+            apiKey = BuildConfig.GEMINI_API_KEY
         )
     }
 
     suspend fun generateInsights(summaryData: String): String = withContext(Dispatchers.IO) {
-        if (API_KEY == "YOUR_GEMINI_API_KEY_HERE") {
-            return@withContext "API Key missing. Please provide a valid Gemini API key in GeminiService.kt."
+        if (BuildConfig.GEMINI_API_KEY.isBlank()) {
+            return@withContext "API Key missing. Please set GEMINI_API_KEY in local.properties."
         }
 
         val prompt = """
