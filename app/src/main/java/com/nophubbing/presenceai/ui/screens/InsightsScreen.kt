@@ -21,7 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nophubbing.presenceai.ai.GeminiService
+import com.nophubbing.presenceai.ai.PresenceHistoryManager
 import com.nophubbing.presenceai.analytics.InsightsRepository
+import com.nophubbing.presenceai.ui.components.*
 import com.nophubbing.presenceai.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -32,6 +34,7 @@ fun InsightsScreen() {
     var isLoading by remember { mutableStateOf(false) }
     var resultText by remember { mutableStateOf("Tap the button to generate personalized AI insights based on your usage data.") }
     var comparisonText by remember { mutableStateOf("") }
+    val history = remember { PresenceHistoryManager.getHistoryList(context) }
 
     LaunchedEffect(Unit) {
         comparisonText = InsightsRepository.getWeeklyComparison(context)
@@ -111,7 +114,7 @@ fun InsightsScreen() {
                         scope.launch {
                             isLoading = true
                             val summary = InsightsRepository.getWeeklyComparison(context)
-                            resultText = GeminiService.generateInsights(summary)
+                            resultText = GeminiService.generateInsights(context, summary)
                             isLoading = false
                         }
                     },
@@ -126,6 +129,42 @@ fun InsightsScreen() {
             }
         }
         
+        Spacer(Modifier.height(32.dp))
+
+        // ── Historical Visualization ──────────────────────────────────
+        Text(
+            "HISTORICAL TRENDS",
+            color = TextMuted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
+        )
+        Spacer(Modifier.height(16.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(BgCard)
+                .border(1.dp, BgCardBorder, RoundedCornerShape(20.dp))
+                .padding(20.dp)
+        ) {
+            Column {
+                PresenceLineChart(history = history, modifier = Modifier.fillMaxWidth())
+                
+                Spacer(Modifier.height(32.dp))
+                
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    ScoreBarChart(history = history, modifier = Modifier.weight(1.2f))
+                    Spacer(Modifier.width(16.dp))
+                    NudgeAcceptancePieChart(
+                        acceptanceRate = history.lastOrNull()?.acceptanceRate ?: 0,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(32.dp))
     }
 }
