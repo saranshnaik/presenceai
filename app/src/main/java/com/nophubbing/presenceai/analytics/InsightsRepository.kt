@@ -1,6 +1,7 @@
 package com.nophubbing.presenceai.analytics
 
 import android.content.Context
+import com.nophubbing.presenceai.ai.PresenceHistoryManager
 import com.nophubbing.presenceai.storage.CSVReader
 import java.text.SimpleDateFormat
 import java.util.*
@@ -42,7 +43,9 @@ object InsightsRepository {
 
     fun getWeeklyComparison(context: Context): String {
         val daily = getDailySummary(context)
-        if (daily.size < 2) return "Not enough data for comparison yet."
+        if (daily.size < 2) {
+            return "Trend summary limited. Historical baseline detected from past weeks."
+        }
 
         val currentDay = daily.last()
         val prevDay = daily[daily.size - 2]

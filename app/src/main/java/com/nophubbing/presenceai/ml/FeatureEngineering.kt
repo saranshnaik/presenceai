@@ -1,74 +1,49 @@
 package com.nophubbing.presenceai.ml
 
 /**
- * FeatureEngineering.kt — maps a SignalRow to a 14-element FeatureVector.
- * Pure object. No IO. No Context. No throws for expected inputs.
+ * FeatureEngineering — maps SignalRow → FloatArray(7) for the 7-feature pipeline.
  *
- * Normalisation ranges match the training CSV distribution.
- * Changing the order of features breaks the dot product — NEVER reorder.
- *
- * NOTE on BLE / VAD gates:
- *   x10 voice_activity_detected  → hardware binary: 0 until mic permission
- *   x11 people_nearby_count      → converted to binary gate: 0 until BT granted
- *   x12 vad_confidence_score     → 0.0 until mic granted
- *   x13 bt_signal_strength       → 0.0 until BT granted
- * When these are 0, the model still works — it just can't confirm social context.
- * The model was trained on this distribution, so it handles it correctly.
+ * Index | Name                 | Range   | Guard
+ *   0   | x1 unlock_freq       | [0,4]   | rollingAvg < 0.1 → denom = 3.0
+ *   1   | x2 micro_sess_ratio  | [0,1]   | totalSessions=0 → 0.0
+ *   2   | x3 notif_reflex      | {0,1}   | delta=0 → 0.0
+ *   3   | x4 behavior_drift_z  | [-3,3]  | !baselineReady → 0.0
+ *   4   | x5 time_phase        | [0,1]   | evening=1, day=0
+ *   5   | x6 vad_energy        | {0,1}   | binary
+ *   6   | x7 ble_social        | {0,1}   | people count binary
  */
 object FeatureEngineering {
 
-    fun buildFeatureVector(row: SignalRow): FeatureVector {
-        val f = listOf(
-            // x0: hour_of_day normalised to [0,1]
-            row.hourOfDay.toDouble().coerceIn(0.0, 23.0) / 23.0,
+    fun buildFeatureVector(row: SignalRow): FloatArray {
+        val f = FloatArray(7)
 
-            // x1: is_evening_session — binary 0/1
-            row.isEveningSession.toDouble().coerceIn(0.0, 1.0),
+        // x1 Unlock frequency normalised to rolling baseline
+        val denom = if (row.rollingAvgUnlocks < 0.1f) 3.0f else row.rollingAvgUnlocks
+        f[0] = (row.unlocks10Min.toFloat() / denom).coerceIn(0f, 4f)
 
-            // x2: baseline_unlocks_per_hour — normalised [0, 30]
-            row.baselineUnlocksPerHour.coerceIn(0.0, 30.0) / 30.0,
+        // x2 Micro-session ratio
+        f[1] = if (row.totalSessions > 0)
+            (row.microSessions.toFloat() / row.totalSessions).coerceIn(0f, 1f)
+        else 0f
 
-            // x3: baseline_session_duration_s — normalised [0, 300]
-            row.baselineSessionDurationS.coerceIn(0.0, 300.0) / 300.0,
+        // x3 Notification reflex (unlocked phone within 60s of notification)
+        f[2] = if (row.lastNotifDeltaMs in 1 until 60_000) 1f else 0f
 
-            // x4: baseline_notif_gap_s — normalised [0, 120]
-            row.baselineNotifGapS.coerceIn(0.0, 120.0) / 120.0,
+        // x4 Behaviour drift z-score
+        f[3] = if (row.baselineReady) {
+            val stddev = row.baselineStdDev.coerceAtLeast(0.01f)
+            ((row.behaviorRate - row.baselineMean) / stddev).coerceIn(-3f, 3f)
+        } else 0f
 
-            // x5: unlock_count_per_hour — normalised [0, 30]  ← key predictor
-            row.unlockCountPerHour.coerceIn(0.0, 30.0) / 30.0,
+        // x5 Time phase (1 = evening/night risk window)
+        f[4] = if (row.hourOfDay >= 18 || row.hourOfDay < 6) 1f else 0f
 
-            // x6: micro_session_duration_s — normalised [0, 60]
-            row.microSessionDurationS.coerceIn(0.0, 60.0) / 60.0,
+        // x6 VAD energy (binary — voice detected nearby)
+        f[5] = row.voiceActivityDetected.toFloat().coerceIn(0f, 1f)
 
-            // x7: notif_to_unlock_gap_s — normalised [0, 60]
-            row.notifToUnlockGapS.coerceIn(0.0, 60.0) / 60.0,
+        // x7 BLE social context (binary — device detected nearby)
+        f[6] = if (row.peopleNearbyCount > 0) 1f else 0f
 
-            // x8: behavior_drift_score — already a z-score, normalise [-3, 3] → [-1, 1]
-            row.behaviorDriftScore.coerceIn(-3.0, 3.0) / 3.0,
-
-            // x9: time_phase_risk — already in [0, 1]
-            row.timePhaseRisk.coerceIn(0.0, 1.0),
-
-            // x10: voice_activity_detected — binary; 0 until mic permission
-            if (row.voiceActivityDetected == 1) 1.0 else 0.0,
-
-            // x11: people_nearby_count → binary gate; 0 until BT permission
-            if (row.peopleNearbyCount > 0) 1.0 else 0.0,
-
-            // x12: vad_confidence_score — [0, 1]; 0.0 until mic granted
-            (row.vadConfidenceScore / 100.0).coerceIn(0.0, 1.0),
-
-            // x13: bt_signal_strength — [0, 1]; 0.0 until BT granted
-            row.btSignalStrength.coerceIn(0.0, 1.0)
-        )
-
-        // Validate — should never trigger given coerceIn guards above
-        f.forEachIndexed { i, v ->
-            require(!v.isNaN() && !v.isInfinite()) {
-                "Feature[${FEATURE_NAMES[i]}] = $v is NaN or Inf for row at ${row.timestamp}"
-            }
-        }
-
-        return FeatureVector(f)
+        return f
     }
 }

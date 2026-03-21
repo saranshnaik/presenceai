@@ -60,7 +60,7 @@ object LrClassifier {
 
     fun shouldNudge(features: List<Double>, weights: LRWeights, config: PipelineConfig): Boolean {
         val pPhub = computePPhub(features, weights, config)
-        return RuleBasedClassifier.shouldNudge(pPhub, config.nudge_threshold)
+        return RuleBasedClassifier.shouldNudge(pPhub, PipelineConfig.NUDGE_THRESHOLD.toDouble())
     }
 
     /** 

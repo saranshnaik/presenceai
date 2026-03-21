@@ -34,6 +34,7 @@ object PresenceColors {
     val AccentAmber  = Color(0xFFfbbf24)
     val AccentGreen  = Color(0xFF34d399)
     val AccentCoral  = Color(0xFFfb923c)
+    val AccentRed    = Color(0xFFF87171)
 }
 
 // ── Legacy palette (kept so existing screens like CategoryScreen still compile) ──

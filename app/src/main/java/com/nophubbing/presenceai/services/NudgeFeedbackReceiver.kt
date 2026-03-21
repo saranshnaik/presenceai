@@ -7,38 +7,41 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * NudgeFeedbackReceiver
+ * NudgeFeedbackReceiver — catches Accept / Dismiss taps from the nudge notification.
  *
- * Catches the Accept / Dismiss taps from the nudge notification and
- * hands the raw feedback to FeedbackActivityMonitor for validation + weight update.
+ * Flow:
+ *   User taps button → this BroadcastReceiver fires
+ *   → cancels the notification
+ *   → calls FeedbackActivityMonitor.onUserFeedback()
+ *   → 20s observation window → label derived → OnlineLearner.update() called
  *
- * Register in AndroidManifest.xml:
- *   <receiver android:name=".services.NudgeFeedbackReceiver" android:exported="false"/>
+ * The bandit reward is handled separately by PostNudgeObserver (45s window).
+ * Both run concurrently after a nudge fires — they update different models:
+ *   FeedbackActivityMonitor → LR weights (via OnlineLearnerPort)
+ *   PostNudgeObserver       → BanditState (via ViewModel.onLabelResolved)
  */
 class NudgeFeedbackReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "NudgeFeedbackReceiver"
-
         const val ACTION_ACCEPT  = "com.nophubbing.presenceai.NUDGE_ACCEPT"
         const val ACTION_DISMISS = "com.nophubbing.presenceai.NUDGE_DISMISS"
         const val EXTRA_SCORE    = "nudge_score"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        // Dismiss the notification immediately
         NotificationManagerCompat.from(context).cancel(NudgingSystem.NOTIF_ID)
 
-        val score = intent.getFloatExtra(EXTRA_SCORE, -1f)
-        val isPhubbing = intent.action == ACTION_ACCEPT
+        val score       = intent.getFloatExtra(EXTRA_SCORE, 0f)
+        val isPhubbing  = intent.action == ACTION_ACCEPT
 
-        Log.d(TAG, "Feedback received: isPhubbing=$isPhubbing score=$score")
+        Log.d(TAG, "Feedback: isPhubbing=$isPhubbing score=$score")
 
-        // Delegate to the monitor running in the app process.
-        // Use a singleton / dependency injection approach in your app.
-        FeedbackActivityMonitor.getInstance()?.onUserFeedback(
-            userClaimsPhubbing = isPhubbing,
-            scoreAtNudge       = score
-        )
+        val monitor = FeedbackActivityMonitor.getInstance()
+        if (monitor == null) {
+            Log.e(TAG, "FeedbackActivityMonitor not initialized — feedback lost!")
+            return
+        }
+        monitor.onUserFeedback(userClaimsPhubbing = isPhubbing, scoreAtNudge = score)
     }
 }

@@ -32,7 +32,7 @@ import kotlinx.coroutines.*
  */
 class PostNudgeObserver(private val context: Context) {
 
-    private val config = PipelineConfig()
+    // private val config = PipelineConfig() // Removed: PipelineConfig is now an object
     private var job: Job? = null
     private var screenReceiver: BroadcastReceiver? = null
 
@@ -96,7 +96,7 @@ class PostNudgeObserver(private val context: Context) {
 
         // Observation coroutine
         job = CoroutineScope(Dispatchers.Default).launch {
-            delay(config.observation_window_s * 1_000L)  // wait full window
+            delay(PipelineConfig.OBSERVATION_WINDOW_S * 1_000L)  // wait full window
 
             val phoneDownMs: Long = when {
                 screenOffTimeMs < 0 -> 0L  // screen never went off
@@ -105,7 +105,7 @@ class PostNudgeObserver(private val context: Context) {
             }
 
             val reUnlockWithin = reUnlockTimeMs > 0 &&
-                (reUnlockTimeMs - nudgeFiredAt) < config.re_unlock_window_ms
+                (reUnlockTimeMs - nudgeFiredAt) < PipelineConfig.RE_UNLOCK_WINDOW_MS
 
             val resolved = LabelResolver.resolveAll(
                 phoneDownDurationMs      = phoneDownMs,
