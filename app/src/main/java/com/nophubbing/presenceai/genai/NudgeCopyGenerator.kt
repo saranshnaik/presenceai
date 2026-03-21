@@ -1,30 +1,6 @@
 package com.nophubbing.presenceai.genai
 
 import android.util.Log
-<<<<<<< HEAD
-import com.nophubbing.presenceai.ai.GeminiService
-
-data class NudgeContext(
-    val unlockCount:   Int,
-    val microSessions: Int,
-    val notifReflex:   Boolean,
-    val pPhub:         Float,
-    val voicePresent:  Boolean,
-    val blePresent:    Boolean,
-    val hourOfDay:     Int
-)
-
-object NudgeCopyGenerator {
-    private const val TAG = "NudgeCopyGenerator"
-
-    suspend fun generateNudgeCopy(ctx: NudgeContext): String {
-        return try {
-            GeminiService.generateNudge(
-                presenceScore = ((1f - ctx.pPhub) * 100).toInt(),
-                isEvening     = ctx.hourOfDay >= 18 || ctx.hourOfDay < 6,
-                someoneNearby = ctx.voicePresent || ctx.blePresent
-            ).ifBlank { Fallbacks.NUDGE_COPY }
-=======
 
 /**
  * Context object carrying ML signals → Claude prompt.
@@ -89,7 +65,6 @@ object NudgeCopyGenerator {
             )
             val copy = result.take(120).trim()
             if (copy.isBlank()) Fallbacks.NUDGE_COPY else copy
->>>>>>> 9dcff341204a809012f0c63fe5b6648ca0cf4a9e
         } catch (e: Exception) {
             Log.e(TAG, "generateNudgeCopy failed: ${e.message}")
             Fallbacks.NUDGE_COPY
