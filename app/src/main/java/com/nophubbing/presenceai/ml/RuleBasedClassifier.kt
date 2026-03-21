@@ -101,6 +101,13 @@ object RuleBasedClassifier {
             Log.d(TAG, "Nudge CONFIRMED at pPhub=${"%.4f".format(pPhub)}")
         }
         return confirmed
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
+    }
+
+    /** Reset EMA state. */
+    fun reset() {
+        lastPPhub = 0.0
+        nudgeConfirmationSteps = 0
     }
 
     /** Reset EMA state. */

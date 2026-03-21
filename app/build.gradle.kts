@@ -1,4 +1,8 @@
 import java.util.Properties
+<<<<<<< HEAD
+import java.io.FileInputStream
+=======
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
 
 plugins {
     alias(libs.plugins.android.application)
@@ -6,11 +10,18 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+<<<<<<< HEAD
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+=======
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
     if (localPropertiesFile.exists()) {
         load(localPropertiesFile.inputStream())
     }
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
 }
 
 android {
@@ -25,12 +36,18 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+<<<<<<< HEAD
+        
+        val claudeKey = localProperties.getProperty("CLAUDE_API_KEY") ?: ""
+        buildConfigField("String", "CLAUDE_API_KEY", "\"$claudeKey\"")
+=======
 
         buildConfigField(
             "String",
             "GEMINI_API_KEY",
             "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\""
         )
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
     }
 
     buildTypes {
@@ -52,6 +69,13 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+<<<<<<< HEAD
+=======
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+>>>>>>> 812d93c9763a4dcbb68f4ea9d5819da4db7407fb
     }
 }
 

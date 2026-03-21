@@ -72,7 +72,7 @@ class MonitoringService : Service() {
             while (isActive) {
                 try { collectAndSaveSignals() }
                 catch (e: Exception) { Log.e(TAG, "Heartbeat error: ${e.message}") }
-                delay(3_000L) // Capture every 3 seconds as requested
+                delay(30_000L) // Default to 30s as per context
             }
         }
     }
