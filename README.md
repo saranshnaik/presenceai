@@ -1,52 +1,44 @@
 # PresenceAI
 
-> An intelligent mobile application leveraging machine learning and reinforcement learning to combat phone addiction through personalized, context-aware nudges.
+PresenceAI is an Android application built during the **HackCrux 2026** Hackathon organized by **LNMIIT, Jaipur** to address phone overuse and phubbing. It uses behavioral signals, machine learning, reinforcement learning, and generative AI to decide when a user may benefit from a nudge and what kind of nudge to show.
 
-[![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](https://www.android.com/)
-[![Kotlin](https://img.shields.io/badge/kotlin-1.9+-purple.svg)](https://kotlinlang.org/)
-[![API Level](https://img.shields.io/badge/API%20Level-24%2B-blue.svg)](https://www.android.com/)
+The goal was to move beyond fixed screen-time reminders and build a system that adapts to individual usage patterns.
 
-## 🌐 Website
-[Visit PresenceAI Website](https://your-website-link-here.com)
+## Features
 
-## Overview
+- Tracks app usage and notification-related behavioral signals
+- Classifies applications and extracts behavioral features
+- Uses an online logistic regression model to estimate the user's current state
+- Uses an ε-greedy multi-armed bandit to select nudge strategies
+- Generates personalized nudges using Google's Gemini API
+- Collects feedback from user interactions with nudges
+- Continuously updates the learning components based on new interactions
+- Runs monitoring and notification handling through Android background services
 
-PresenceAI is an Android application designed to help users reduce phone addiction by providing intelligent, personalized nudges. The app combines behavioral analytics, machine learning, and reinforcement learning to understand user patterns and deliver contextually appropriate interventions that encourage healthier phone usage habits.
+## Architecture
 
-## ✨ Key Features
+The project is divided into a few main modules:
 
-- **Behavioral Analytics**: Tracks and analyzes user behavior patterns, application categories, and usage signals
-- **Intelligent Nudges**: AI-powered suggestions using Google's Gemini API to provide personalized, context-aware interventions
-- **Machine Learning Pipeline**: Online learning model that adapts to individual user patterns
-- **Reinforcement Learning**: Multi-armed bandit algorithm for optimal nudge strategy selection
-- **Real-time Monitoring**: Background service for continuous notification and usage tracking
-- **Feedback Integration**: Learns from user responses to improve nudge effectiveness
-- **Privacy-Focused**: App-level analytics and on-device learning
-
-## 🏗️ Architecture
-
-### Core Modules
-
-```
+```text
 presenceai/
-├── analytics/              # Behavior tracking and signal extraction
+├── analytics/
 │   ├── AppCategoryClassifier.kt
 │   ├── BehaviorSignals.kt
 │   ├── FeatureExtractor.kt
 │   ├── NotificationTracker.kt
 │   ├── SignalAggregator.kt
 │   └── SignalRepository.kt
-├── genai/                  # Generative AI integration
+├── genai/
 │   ├── GeminiNudge.kt
 │   └── GenAiModule.kt
-├── ml/                     # Machine learning pipeline
+├── ml/
 │   ├── FeatureEngineering.kt
 │   ├── LrClassifier.kt
 │   ├── ModelStore.kt
 │   ├── OnlineLearner.kt
 │   ├── PipelineRunner.kt
 │   └── Schema.kt
-├── rl/                     # Reinforcement learning (Bandit)
+├── rl/
 │   ├── Bandit.kt
 │   ├── BanditAction.kt
 │   ├── BanditConfig.kt
@@ -57,151 +49,211 @@ presenceai/
 │   ├── RewardFunction.kt
 │   ├── ScreenEvent.kt
 │   └── PostNudgeObserver.kt
-├── services/               # Android services and listeners
+├── services/
 │   ├── MonitoringService.kt
 │   ├── NotificationListener.kt
 │   ├── NudgeFeedbackReceiver.kt
 │   ├── FalseNegativeGuard.kt
 │   └── FeedbackActivityMonitor.kt
-└── ui/                     # User interface components
-    └── viewmodel/          # ViewModel for MVVM architecture
+└── ui/
+    └── viewmodel/
 ```
 
-### Data Flow
+## How It Works
 
-1. **Collection**: NotificationListener and MonitoringService collect usage data
-2. **Analysis**: FeatureExtractor and SignalAggregator process raw signals
-3. **Prediction**: LrClassifier predicts user addiction likelihood
-4. **Decision**: Bandit algorithm selects optimal nudge strategy
-5. **Generation**: GeminiNudge generates personalized messages
-6. **Feedback**: User responses feed back into the learning loop
+The main pipeline is:
 
-## 🛠️ Technology Stack
+```text
+Usage / Notification Signals
+            │
+            ▼
+     Feature Extraction
+            │
+            ▼
+    Logistic Regression
+            │
+            ▼
+    User State / Risk Estimate
+            │
+            ▼
+   Multi-Armed Bandit Decision
+            │
+            ▼
+       Nudge Selection
+            │
+            ▼
+      Gemini Nudge Generation
+            │
+            ▼
+       User Interaction
+            │
+            ▼
+          Feedback
+            │
+            └──────────► Learning Loop
+```
 
-- **Language**: Kotlin
-- **Framework**: Android Architecture Components (MVVM)
-- **Machine Learning**: Custom online learning pipeline
-- **Reinforcement Learning**: Multi-Armed Bandit Algorithm
-- **Generative AI**: Google Gemini API
-- **Build System**: Gradle with Kotlin DSL
-- **Monitoring**: Background Services, Notification Listeners
+### 1. Behavioral Signals
 
-## 📋 Prerequisites
+The analytics module collects signals such as application usage, notification activity, timing, and other usage patterns. These signals are processed into features for the ML pipeline.
 
-- **Android SDK**: API Level 24 or higher
-- **Java/Kotlin**: JDK 11 or higher
-- **Gradle**: 8.0 or higher
-- **Google Cloud Account**: For Gemini API access (optional)
+### 2. Machine Learning
 
-## 🚀 Installation
+The `ml` module contains an online logistic regression pipeline. Rather than relying entirely on a fixed model, the learner can update its parameters as new interaction data becomes available.
 
-### 1. Clone the Repository
+### 3. Reinforcement Learning
+
+The `rl` module uses an **ε-greedy multi-armed bandit** to choose between available nudge strategies.
+
+The available actions represent different nudge formats or strategies. A reward function evaluates the resulting interaction and feeds that information back into the bandit.
+
+### 4. Generative AI
+
+The selected nudge is generated through the **Google Gemini API** using the available user context and behavioral information.
+
+### 5. Feedback
+
+The application observes what happens after a nudge and uses the resulting feedback as part of the learning process.
+
+## Technology Stack
+
+- **Kotlin**
+- **Android**
+- **Android Architecture Components / MVVM**
+- **Gradle**
+- **Logistic Regression**
+- **Online Learning**
+- **ε-Greedy Multi-Armed Bandit**
+- **Google Gemini API**
+- **Android Background Services**
+- **Notification Listener**
+
+## Requirements
+
+- Android SDK with API Level 24 or higher
+- JDK 11 or higher
+- Gradle 8.0 or higher
+- A Gemini API key for the generative-AI functionality
+
+Some features depend on Android permissions for usage monitoring and notification access.
+
+## Setup
+
+Clone the repository:
+
 ```bash
 git clone https://github.com/saranshnaik/presenceai.git
 cd presenceai
 ```
 
-### 2. Configure Gradle
+Make the Gradle wrapper executable on Linux/macOS:
+
 ```bash
 chmod +x gradlew
 ```
 
-### 3. Build the Project
+Build the project:
+
 ```bash
 ./gradlew build
 ```
 
-### 4. Run on Emulator or Device
+Install the debug build on a connected device or emulator:
+
 ```bash
 ./gradlew installDebug
 ```
 
-### 5. Configure API Keys
-Add your Gemini API key to the project configuration:
-```properties
-GEMINI_API_KEY=your_api_key_here
+Configure the Gemini API key using the project's local configuration before running the application. Do not commit the key to the repository.
+
+## Usage
+
+After installing the application, grant the permissions required for usage monitoring and notification access.
+
+The application then monitors the relevant signals in the background. When the system determines that a nudge is appropriate, the bandit selects a nudge strategy and the Gemini integration generates the corresponding message.
+
+Users can interact with the nudge, and the resulting feedback is used by the learning components.
+
+## Machine Learning
+
+The ML component uses:
+
+- **Model:** Logistic Regression
+- **Learning:** Online/incremental updates
+- **Features:** Application category, time-related signals, notification activity, usage duration, and other behavioral signals
+
+The model is intended to adapt to individual usage patterns rather than treating every user identically.
+
+## Reinforcement Learning
+
+The reinforcement-learning component uses an **ε-greedy multi-armed bandit**.
+
+At a high level:
+
+```text
+Available Nudge Strategies
+          │
+          ▼
+   Bandit selects action
+          │
+          ▼
+    Nudge is delivered
+          │
+          ▼
+     User response
+          │
+          ▼
+      Reward value
+          │
+          ▼
+   Update bandit state
 ```
 
-## 📱 Usage
+This allows the application to gradually favor nudge strategies that produce better outcomes for a particular user.
 
-### Starting the Monitoring Service
-```kotlin
-val intent = Intent(context, MonitoringService::class.java)
-ContextCompat.startForegroundService(context, intent)
+## Generative AI
+
+The Gemini integration is handled by the `genai` module.
+
+The model receives relevant context from the application's processing pipeline and produces the final nudge text. The intention is to make the intervention more specific to the user's situation instead of relying on a fixed collection of messages.
+
+## Data
+
+The repository contains sample datasets used during development, including:
+
+```text
+presenceai_dataset.csv
+PRESENCE_AI_56k_FULL.csv
 ```
 
-### Triggering a Nudge
-The app automatically generates nudges based on detected usage patterns. Nudges are delivered through the notification system.
+These datasets contain behavioral data used for developing and evaluating the project's ML components.
 
-### Providing Feedback
-Users can interact with nudges through the notification feedback receiver, which helps the model improve over time.
+## Testing
 
-## 🔬 Algorithm Details
+Run the unit tests with:
 
-### Machine Learning Model
-- **Type**: Logistic Regression with online learning
-- **Features**: App category, time of day, notification frequency, usage duration, behavioral signals
-- **Training**: Incremental updates on each user interaction
-
-### Reinforcement Learning Strategy
-- **Algorithm**: ε-Greedy Multi-Armed Bandit
-- **Actions**: Different nudge formats and content strategies
-- **Reward**: User engagement and behavior change metrics
-
-### Nudge Generation
-- **Engine**: Google's Gemini API
-- **Inputs**: User context, behavior patterns, predicted addiction state
-- **Output**: Personalized, contextually appropriate messages
-
-## 📊 Data & Datasets
-
-The project includes sample datasets:
-- `presenceai_dataset.csv`: Core behavioral data
-- `PRESENCE_AI_56k_FULL.csv`: Extended dataset with 56K records
-
-## 🧪 Testing
-
-### Run Unit Tests
 ```bash
 ./gradlew test
 ```
 
-### Run Instrumented Tests
+For instrumented Android tests:
+
 ```bash
 ./gradlew connectedAndroidTest
 ```
 
-## 🤝 Contributing
+## Hackathon
 
-We welcome contributions! Please follow these steps:
+PresenceAI was developed as a project for the **HackCrux 2026** Hackathon.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+The project focused on combining on-device behavioral analysis with adaptive ML/RL techniques and generative AI to create a more context-aware approach to reducing problematic phone usage.
 
-## 📝 Project Structure Notes
+## Team
 
-- **Analytics**: Focuses on signal extraction and user behavior classification
-- **GenAI**: Handles integration with generative AI models for nudge personalization
-- **ML**: Contains the core machine learning pipeline and model management
-- **RL**: Implements decision-making algorithms for nudge optimization
-- **Services**: Manages background processes and system integration
-- **UI**: Implements the user-facing interface and view models
+**Protoc01**
 
-## ⚖️ License
+## Notes
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+PresenceAI is a hackathon project and should be treated as a prototype rather than a production digital-wellbeing or medical system.
 
-## 👥 Team
-
-PresenceAI is developed as part of the Code It Beyond Hackathon.
-
-## 📧 Support
-
-For questions or issues, please open an issue on the GitHub repository or contact the development team.
-
----
-
-**Note**: This is an active research project. The algorithms and strategies are continuously being improved and evaluated for effectiveness.
+The repository contains experimental components and implementation decisions made under hackathon constraints. The ML and reinforcement-learning components are intended to demonstrate the adaptive approach rather than provide a clinically validated measure of phone addiction.
